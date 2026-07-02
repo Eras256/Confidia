@@ -1,0 +1,17 @@
+{
+  "name": "confidia-distributions-sdk",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "confidia-merkle": "workspace:^1.0.0",
+    "confidia-jwt-sdk": "workspace:^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

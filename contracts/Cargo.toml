@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "jwk-registry",
+    "ultrahonk-verifier",
+    "vesting-claim",
+    "compliance",
+    "gateway",
+]
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = false
+panic = "abort"
+lto = true
+codegen-units = 1

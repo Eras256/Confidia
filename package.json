@@ -1,0 +1,24 @@
+{
+  "name": "confidia-monorepo",
+  "version": "1.0.0",
+  "description": "LCP-Aware ZK Agentic Payments Toolkit on Stellar",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter confidia-api dev & pnpm --filter confidia-web dev & pnpm --filter confidia-worker dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:contracts": "cargo test --manifest-path contracts/Cargo.toml",
+    "build:contracts": "RUSTFLAGS=\"-C target-feature=-reference-types,-multivalue\" cargo +nightly-2025-02-04 build --manifest-path contracts/Cargo.toml --target wasm32-unknown-unknown --release -Z build-std=std,panic_abort",
+    "deploy:contracts": "node packages/confidia-sdk/scripts/deploy.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "confidia:init": "node packages/confidia-sdk/dist/esm/scripts/confidia-init.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.12.12",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5"
+  },
+  "packageManager": "pnpm@9.1.4"
+}

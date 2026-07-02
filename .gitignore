@@ -1,0 +1,76 @@
+# ============================================================
+# Confidia — .gitignore
+# ============================================================
+
+# ── Dependencies ─────────────────────────────────────────────
+node_modules/
+
+# ── Build outputs ────────────────────────────────────────────
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# Rust / Soroban build artifacts
+contracts/**/target/
+
+# ── Environment & secrets ────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Local runtime database ───────────────────────────────────
+db.json
+
+# ── Lock files (keep pnpm-lock, ignore others) ───────────────
+package-lock.json
+yarn.lock
+
+# ── OS files ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# ── IDE / Editor ─────────────────────────────────────────────
+.idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── VS Code (keep settings.json for workspace config) ────────
+# .vscode/ is intentionally tracked for workspace-level config
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Testing / Coverage ──────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Internal demo scripts ────────────────────────────────────
+3_MINUTE_DEMO.md
+
+# ── AI agent context files (kept local, not published) ───────
+# Matches these filenames at any depth in the tree.
+CLAUDE.md
+MEMORY.md
+AGENT.md
+AGENTS.md
+SKILL.md
+
+# ── Misc ─────────────────────────────────────────────────────
+*.wasm
+*.tgz
+.turbo/
+.vercel/
+.cache/

@@ -1,0 +1,13 @@
+# Soroban WASM build configuration
+#
+# Rust 1.82+ enables post-MVP WebAssembly features (reference-types,
+# multivalue, ...) by default for the wasm32-unknown-unknown target.
+# The Soroban runtime only accepts MVP WASM, so deploying such a module
+# fails with: `reference-types not enabled: zero byte expected`.
+#
+# `target-cpu=mvp` alone does NOT reset these (they are default-on
+# features, not part of the cpu baseline), so we disable them
+# explicitly. Scoped to the wasm target so native `cargo test`
+# (host builds) is unaffected.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=-reference-types,-multivalue"]
