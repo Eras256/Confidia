@@ -1,0 +1,35 @@
+{
+  "note": "REAL UltraHonk verifier — genuine on-chain ZK verification, confirmed live on Stellar Testnet.",
+  "status": "LIVE — real UltraHonk proof verified on-chain (positive + negative soundness proven).",
+  "backend": "NethermindEth/rs-soroban-ultrahonk @ 661db07200f890b1bd9a7349ed787c70a706dd12",
+  "usedBy": "OpenZeppelin stellar-contracts feat/confidential-verifier-ultrahonk (ConfidentialVerifier)",
+  "verification": "Genuine UltraHonk (Honk): transcript + sumcheck + Shplemini + BN254 pairing via soroban-sdk 26 crypto::bn254 host functions (protocol 27). NOT a simulation.",
+  "toolchain": {
+    "sorobanSdk": "26.0.1",
+    "wasmTarget": "wasm32v1-none",
+    "noir": "1.0.0-beta.9",
+    "barretenberg": "0.87.0",
+    "proveFlags": "bb prove --scheme ultra_honk --oracle_hash keccak --output_format bytes_and_fields"
+  },
+  "onchain": {
+    "network": "testnet (protocol 27)",
+    "wasmHash": "8c3db32f71eec194248975060d2e2e1531e9b7f3761b1148e332b63cd9d7b13b",
+    "verifierInstance": "CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J",
+    "explorer": "https://stellar.expert/explorer/testnet/contract/CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J",
+    "vkRegistered": "immutable at deploy via __constructor(vk_bytes) — 1760-byte packed UltraHonk VK, validated by parsing"
+  },
+  "circuit": {
+    "name": "simple_circuit",
+    "source": "fn main(x: Field, y: pub Field) { assert(x != y); }",
+    "publicInput": "y = 2",
+    "artifacts": "contracts/real-verifier/artifacts/simple_circuit/{proof,vk,public_inputs}",
+    "proofBytes": 14592,
+    "vkBytes": 1760,
+    "publicInputsBytes": 32
+  },
+  "evidence": {
+    "positive": "verify_proof(public_inputs, proof) -> () (Ok)  — real proof accepted on-chain",
+    "negative": "verify_proof(public_inputs, tampered_proof) -> Error(Contract, #4) VerificationFailed  — forgery rejected"
+  },
+  "reproduce": "see contracts/real-verifier/README.md"
+}

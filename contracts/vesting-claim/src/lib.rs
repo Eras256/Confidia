@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractclient, contractimpl, contracttype, token, Address, Bytes, Env, String, Vec,
+    contract, contractclient, contractimpl, contracttype, token, Address, Bytes, Env, String,
     symbol_short,
 };
 
@@ -18,10 +18,19 @@ pub trait JwkRegistryInterface {
     fn is_key_trusted(env: Env, kid: String) -> bool;
 }
 
-/// External interface for the UltraHonk verifier contract.
+/// External interface for the REAL UltraHonk verifier
+/// ([`NethermindEth/rs-soroban-ultrahonk`], the backend of OpenZeppelin's
+/// `ConfidentialVerifier`), deployed separately on soroban-sdk 26 and called
+/// here by address. Its `verify_proof(public_inputs, proof_bytes)` returns
+/// `Result<(), Error>`: on a valid proof the sub-invocation returns unit; on an
+/// invalid/forged proof it reverts, which propagates and reverts this claim.
+/// The SDK-20 vault and the SDK-26 verifier interoperate purely by address.
+///
+/// Live testnet instance: `CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J`
+/// (see `contracts/real-verifier.testnet.json`).
 #[contractclient(name = "UltrahonkVerifierClient")]
 pub trait UltrahonkVerifierInterface {
-    fn verify_proof(env: Env, proof: Bytes, public_inputs: Vec<Bytes>) -> bool;
+    fn verify_proof(env: Env, public_inputs: Bytes, proof_bytes: Bytes);
 }
 
 #[contracttype]
@@ -55,7 +64,7 @@ impl VestingClaimVaultContract {
     pub fn claim(
         env: Env,
         proof: Bytes,
-        public_inputs: Vec<Bytes>,
+        public_inputs: Bytes,
         recipient: Address,
         nullifier: Bytes,
         kid: String,
@@ -74,13 +83,12 @@ impl VestingClaimVaultContract {
             panic!("Claims verification failed: Key ID not trusted in registry.");
         }
 
+        // Real UltraHonk verification: the external verifier reverts on an
+        // invalid proof, which propagates and reverts this claim. Reaching the
+        // next line means the proof cryptographically verified on-chain.
         let verifier_addr: Address = env.storage().instance().get(&StorageKey::Verifier).unwrap();
         let verifier_client = UltrahonkVerifierClient::new(&env, &verifier_addr);
-        let valid_proof = verifier_client.verify_proof(&proof, &public_inputs);
-
-        if !valid_proof {
-            panic!("ZK Proof Verification Failed.");
-        }
+        verifier_client.verify_proof(&public_inputs, &proof);
 
         // Execute actual token transfer from vault to recipient
         let token_addr: Address = env.storage().instance().get(&StorageKey::FundingAsset).unwrap();

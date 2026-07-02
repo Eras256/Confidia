@@ -24,10 +24,16 @@ are entitled to a payout without ever revealing their email, wallet linkage, or
 allocation to the public ledger, while issuers retain auditor view-keys and
 regulatory controls.
 
+Zero-knowledge verification here is **real, not simulated**: a genuine UltraHonk
+proof is verified **on-chain on Stellar Testnet** by Nethermind's
+`rs-soroban-ultrahonk` (BN254 pairing over `soroban-sdk 26` host functions — the
+exact backend of OpenZeppelin's `ConfidentialVerifier`), and a proof with a single
+byte flipped is rejected with `VerificationFailed` (§9).
+
 This paper describes the protocol architecture, the on-chain contract suite, the
 cryptographic constructions, the identity and compliance flows, the build/deploy
-methodology, the threat model, and the roadmap from the current testnet
-simulation to production zero-knowledge verification.
+methodology, the threat model, and — explicitly — which parts are real versus
+simulated, with the roadmap to full production zero-knowledge claims.
 
 ---
 
@@ -129,6 +135,12 @@ verify_proof(proof, public_inputs) -> bool
 An earlier design carried two verifier crates (a stateless one and a VK-registry
 one). They were **merged** into this single contract to remove the duplication
 while preserving the OZ-style registry surface.
+
+This SDK-20 contract is a **labeled fast-path simulation** used to exercise the
+surrounding protocol. The **real** cryptographic verification runs in a separate
+contract — Nethermind's `rs-soroban-ultrahonk` (soroban-sdk 26), which performs
+genuine UltraHonk verification over BN254 host functions and is **live on Testnet**
+(§9). `vesting-claim` calls that real verifier by address.
 
 ### 3.3 `vesting-claim`
 
@@ -266,9 +278,10 @@ each module, initializes them in dependency order, and writes the resulting IDs 
 
 | Contract | Testnet Contract ID |
 |----------|---------------------|
+| **Real UltraHonk Verifier** (Nethermind, SDK 26, BN254) | `CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J` |
 | Gateway | `CANR7PCHCLOP3YMGXPZVOBHIDNYLDVC3IPKRS52ZAPYUVCYQXHVIAGJC` |
 | Vesting Claim Vault | `CB26YAB57YURXLH5NF43AD4O2NSPSFUDXYDAUTKVLAERODRPSEZWMKIX` |
-| UltraHonk Verifier | `CBKTBGW2PJRTRA2VDQVDUQFT2UVVMAWRCMQUJPUYVOPW6SQMFTNGDZPP` |
+| UltraHonk Verifier (SDK 20, simulation) | `CBKTBGW2PJRTRA2VDQVDUQFT2UVVMAWRCMQUJPUYVOPW6SQMFTNGDZPP` |
 | Compliance Hook | `CBI3U4KZGVISV7PDGICBAHBSNYL7FEMJ7HL2GLTNHZXRPCLVTQOP3DLF` |
 | JWK Registry | `CCE7XJSY5NQVI62YISRNZMCIVZGVCJ47WB3NDF5NLJIFMX3UUK62KABR` |
 
@@ -300,28 +313,53 @@ local-dev fallbacks; production disables mock mode via `NODE_ENV=production`.
 
 ---
 
-## 9. Limitations & Production Roadmap
+## 9. ZK Verification: Real vs. Simulated (explicit status)
 
-Confidia's current deployment is a **functional testnet system with a simulated ZK
-verifier**. Specifically:
+Confidia ships **two** verifier paths, and we are explicit about which is which
+because honesty about work-in-progress matters more than a polished mystery.
 
-- **`verify_proof` is a deterministic simulation.** It accepts well-formed proofs
-  (length-bounded, no injected `"invalid"` marker) rather than performing real
-  BN254/Grumpkin pairing verification against the stored VK. It exercises the full
-  end-to-end control flow (registry lookup, verification gate, settlement,
-  nullifier recording) so the surrounding protocol is exact, but the cryptographic
-  check is a placeholder. Production replaces its body with `env.crypto()` pairing
-  + MSM queries against the installed VK — the contract surface (`set_vk`/`get_vk`/
-  `verify_proof`) is already shaped for this.
-- **Funding assets** in the demo vault use placeholder addresses; a production
-  vault is initialized against the real SEP-41 SAC for USDC/EURC.
-- **Auditor view-key management** and full confidential-transfer flows are
-  inherited from the underlying OZ/Nethermind primitive and integrated
-  progressively.
+**(a) Simulated verifier — `contracts/ultrahonk-verifier` (soroban-sdk 20).**
+Its `verify_proof` is a deterministic stand-in: it accepts well-formed proofs
+(length-bounded, no injected `"invalid"` marker) rather than performing real
+pairing verification. It exists so the *surrounding protocol* — registry lookup,
+verification gate, nullifier recording, SEP-41 settlement — is exact and testable
+end-to-end today. It is **not** cryptographic verification and is labeled as such
+in code, README, and the live dashboard.
 
-Roadmap: (1) drop in the real UltraHonk on-chain verifier; (2) mainnet deployment
-against production USDC/EURC SACs; (3) formal verification of the nullifier and
-authorization invariants; (4) LCP registry standardization.
+**(b) Real verifier — Nethermind `rs-soroban-ultrahonk` (soroban-sdk 26).**
+This is genuine UltraHonk (Honk) verification: transcript, sumcheck, Shplemini,
+and BN254 pairing implemented over Soroban's `crypto::bn254` host functions
+(available at protocol 27, which testnet now runs). It is the exact backend
+OpenZeppelin's `ConfidentialVerifier` uses. Status as of this writing:
+
+- ✅ Compiles for `wasm32v1-none` with our toolchain (rustc 1.95, soroban-sdk 26.0.1),
+  producing a 42,964-byte module. Wasm hash
+  `8c3db32f71eec194248975060d2e2e1531e9b7f3761b1148e332b63cd9d7b13b` uploaded to Testnet.
+- ✅ **Instantiated with a real, packed UltraHonk verification key** (validated by the
+  constructor by parsing) — live at
+  `CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J`. The VK was produced from
+  a Noir circuit with **Noir 1.0.0-beta.9 + Barretenberg 0.87.0**
+  (`bb write_vk --scheme ultra_honk --oracle_hash keccak`).
+- ✅ **A real UltraHonk proof was verified on-chain.** `verify_proof(public_inputs, proof)`
+  over a real 14,592-byte proof returned `Ok` on Testnet. **Soundness confirmed:** flipping
+  a single byte of the proof makes the same call revert with
+  `Error(Contract, #4) = VerificationFailed`. Valid proof accepted, forged proof rejected —
+  by BN254 pairing, not a marker check. Artifacts and a reproducer are committed under
+  `contracts/real-verifier/`.
+- ✅ **`vesting-claim` is wired to the real verifier by address** via a `#[contractclient]`
+  trait matching `verify_proof(public_inputs, proof_bytes)`. The SDK-20 vault and the
+  SDK-26 verifier interoperate purely through the contract address; an invalid proof
+  reverts the claim.
+
+**This is no longer an architectural promise: a real UltraHonk proof verifies on Stellar
+Testnet today, and a forged one is rejected.** The remaining production work is swapping
+the demonstration circuit (`assert(x != y)`) for Confidia's OIDC-identity + Merkle-inclusion
+circuit and generating claim proofs in the browser — the same verifier and the same pipeline,
+a different circuit and VK.
+
+Other roadmap items: (1) production USDC/EURC SAC as the vault funding asset
+(demo uses a placeholder); (2) mainnet deployment; (3) formal verification of the
+nullifier/authorization invariants; (4) LCP registry standardization.
 
 ---
 

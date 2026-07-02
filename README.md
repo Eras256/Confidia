@@ -201,7 +201,7 @@ are pinned to `soroban-sdk = "=20.0.0"`.
 |-------|---------|
 | `gateway` | LCP-aware agentic payment gateway — `execute_payment` with SEP-41 transfers + compliance/verifier hooks |
 | `vesting-claim` | ZK vesting vault — nullifier-protected `claim` with cross-contract JWK + verifier checks and SEP-41 settlement |
-| `ultrahonk-verifier` | UltraHonk ZK verifier — admin-gated VK registry (`initialize`/`set_vk`/`get_vk`) + `verify_proof` (mirrors OpenZeppelin `ConfidentialVerifier`) |
+| `ultrahonk-verifier` | Fast-path **simulation** verifier (SDK 20) for protocol testing. The **real** UltraHonk verification runs in a separate deployed contract — Nethermind's `rs-soroban-ultrahonk` (SDK 26, BN254); see [`contracts/real-verifier/`](./contracts/real-verifier/) |
 | `compliance` | On-chain compliance engine — freeze controls + accreditation registry (admin-gated) |
 | `jwk-registry` | On-chain OIDC JWK public-key store (`add_key`/`revoke_key`/`is_key_trusted`) |
 
@@ -209,17 +209,28 @@ are pinned to `soroban-sdk = "=20.0.0"`.
 > locally-declared `#[contractclient]` traits — never by importing the sibling
 > crates (that leaks their entrypoints and collides symbols).
 
-> ⚠️ The verifier's `verify_proof` is a **deterministic testnet simulation**, not
-> real BN254/Grumpkin pairing. See the [Technical Paper](./TECHNICAL_PAPER.md) for
-> the production ZK path.
+> **ZK verification — real, live on Testnet (not a simulation):**
+> A genuine UltraHonk proof is verified **on-chain** by Nethermind's
+> `rs-soroban-ultrahonk` (soroban-sdk 26, BN254 host functions — the exact backend of
+> OpenZeppelin's `ConfidentialVerifier`), deployed at
+> [`CAM2WWTB…IW6J`](https://stellar.expert/explorer/testnet/contract/CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J).
+> A real 14,592-byte proof `verify_proof(...) → Ok`; a proof with **one byte flipped**
+> reverts with `VerificationFailed (#4)`. Artifacts + reproducer:
+> [`contracts/real-verifier/`](./contracts/real-verifier/); details:
+> [Technical Paper §9](./TECHNICAL_PAPER.md).
+>
+> `contracts/ultrahonk-verifier` (soroban-sdk 20) remains as a labeled fast-path
+> **simulation** for end-to-end testing of the surrounding protocol; `vesting-claim`
+> is wired to call the **real** verifier by address.
 
 ### Deployed on Stellar Testnet
 
 | Contract | Contract ID |
 |----------|-------------|
+| **Real UltraHonk Verifier** (Nethermind, SDK 26, BN254) | [`CAM2WWTB…IW6J`](https://stellar.expert/explorer/testnet/contract/CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J) |
 | Gateway | [`CANR7PCH…IAGJC`](https://stellar.expert/explorer/testnet/contract/CANR7PCHCLOP3YMGXPZVOBHIDNYLDVC3IPKRS52ZAPYUVCYQXHVIAGJC) |
 | Vesting Claim Vault | [`CB26YAB5…MKIX`](https://stellar.expert/explorer/testnet/contract/CB26YAB57YURXLH5NF43AD4O2NSPSFUDXYDAUTKVLAERODRPSEZWMKIX) |
-| UltraHonk Verifier | [`CBKTBGW2…DZPP`](https://stellar.expert/explorer/testnet/contract/CBKTBGW2PJRTRA2VDQVDUQFT2UVVMAWRCMQUJPUYVOPW6SQMFTNGDZPP) |
+| UltraHonk Verifier (SDK 20, simulation) | [`CBKTBGW2…DZPP`](https://stellar.expert/explorer/testnet/contract/CBKTBGW2PJRTRA2VDQVDUQFT2UVVMAWRCMQUJPUYVOPW6SQMFTNGDZPP) |
 | Compliance Hook | [`CBI3U4KZ…3DLF`](https://stellar.expert/explorer/testnet/contract/CBI3U4KZGVISV7PDGICBAHBSNYL7FEMJ7HL2GLTNHZXRPCLVTQOP3DLF) |
 | JWK Registry | [`CCE7XJSY…KABR`](https://stellar.expert/explorer/testnet/contract/CCE7XJSY5NQVI62YISRNZMCIVZGVCJ47WB3NDF5NLJIFMX3UUK62KABR) |
 
