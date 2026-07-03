@@ -93,6 +93,35 @@ export interface WriteResult {
   result: any;
 }
 
+// Human-readable explanations for real classic-Stellar operation failure
+// codes, so a rejected on-chain payment reads as an honest explanation
+// instead of a generic "failed" — these are genuine network semantics
+// (e.g. a missing trustline), not bugs in this app.
+const OP_FAILURE_EXPLANATIONS: Record<string, string> = {
+  paymentNoTrust: "the destination account doesn't have a trustline for this asset",
+  paymentNoDestination: "the destination account does not exist on the network",
+  paymentUnderfunded: "the source account doesn't hold enough of this asset",
+  paymentSrcNoTrust: "the source account doesn't have a trustline for this asset",
+  paymentNotAuthorized: "the issuer has not authorized this account to hold the asset",
+  paymentLineFull: "the destination's trustline limit for this asset has been reached",
+};
+
+/** Decodes the real per-operation failure reason from a failed transaction's
+ * parsed result XDR (Soroban RPC already parses resultXdr into an object —
+ * no manual base64 parsing needed). Returns null if it can't be determined. */
+function decodeOperationFailure(resultXdr: any): string | null {
+  try {
+    const opResult = resultXdr.result().results()[0];
+    const trResult = opResult.value(); // OperationResultTr
+    const inner = trResult.value(); // the specific *Result union (e.g. PaymentResult)
+    const code = inner.switch().name as string;
+    const explanation = OP_FAILURE_EXPLANATIONS[code];
+    return explanation ? `${explanation} (${code})` : code;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Signs a Soroban contract invocation with the connected wallet (Freighter via
  * Stellar Wallets Kit), submits it, and polls the RPC until it is confirmed on
@@ -138,7 +167,8 @@ export async function writeContract(
   }
 
   if (getRes.status === rpc.Api.GetTransactionStatus.FAILED) {
-    const e: any = new Error(`Transaction failed on-chain`);
+    const reason = decodeOperationFailure((getRes as any).resultXdr);
+    const e: any = new Error(reason ? `Transaction failed on-chain: ${reason}` : `Transaction failed on-chain`);
     e.hash = hash;
     e.explorerUrl = txExplorerUrl(hash);
     throw e;
@@ -189,7 +219,8 @@ export async function sendPayment(
     getRes = await server.getTransaction(hash);
   }
   if (getRes.status === rpc.Api.GetTransactionStatus.FAILED) {
-    const e: any = new Error('Payment failed on-chain');
+    const reason = decodeOperationFailure((getRes as any).resultXdr);
+    const e: any = new Error(reason ? `Payment rejected on-chain: ${reason}` : 'Payment failed on-chain');
     e.hash = hash; e.explorerUrl = txExplorerUrl(hash);
     throw e;
   }

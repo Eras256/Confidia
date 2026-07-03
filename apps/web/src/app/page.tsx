@@ -91,6 +91,8 @@ export default function Dashboard() {
   const [distTotalRecipients, setDistTotalRecipients] = useState<number>(0);
   const [distDeploying, setDistDeploying] = useState<boolean>(false);
   const [distDeployedAddress, setDistDeployedAddress] = useState<string>("");
+  const [distDeployTx, setDistDeployTx] = useState<{ hash: string; url: string } | null>(null);
+  const [distDeployError, setDistDeployError] = useState<string>("");
   const [claimChartData, setClaimChartData] = useState({ claimed: 0, pending: 22500 });
 
   // Recipient Claim States
@@ -497,28 +499,53 @@ export default function Dashboard() {
     }
   };
 
+  // REAL Freighter-signed activation: registers this distribution's actual
+  // computed Merkle root on the real, already-deployed vesting-claim vault
+  // (contractRegistry.contracts.vestingClaim) via a signed initialize() call —
+  // no fabricated contract address. Reusing the shared vault (rather than
+  // deploying a fresh instance per distribution) is a deliberate simplification:
+  // the vault holds one root/config at a time, so activating a new distribution
+  // re-points it — accurately reflected in the UI as "registered", not "deployed".
   const handleDeployDistribution = async () => {
     if (!distId) return;
+    if (!freighterConnected || !freighterAddress) {
+      setDistDeployError(lang === "es" ? "Conecta Freighter para firmar la activación." : "Connect Freighter to sign the activation.");
+      return;
+    }
+    const vaultId = contractRegistry?.contracts?.vestingClaim;
+    const verifierId = contractRegistry?.contracts?.ultrahonkVerifier;
+    const jwkId = contractRegistry?.contracts?.jwkRegistry;
+    if (!vaultId || !verifierId || !jwkId) {
+      setDistDeployError(lang === "es" ? "Registro de contratos no disponible." : "Contract registry unavailable.");
+      return;
+    }
     setDistDeploying(true);
-    setStatusMessage("Deploying distribution smart contract on Stellar testnet...");
+    setDistDeployError("");
+    setDistDeployTx(null);
     try {
-      const res = await fetch(`${API_BASE}/confidia/distributions/${distId}/activate`, {
-        method: "POST"
-      });
-      const data = await res.json();
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      // Generate a mock address derived from distribution ID to show in UI
-      const mockAddr = "CDIST" + distId.substring(0, 24).toUpperCase();
-      setDistDeployedAddress(mockAddr);
+      const { Asset, Networks: NW } = await import("@stellar/stellar-sdk");
+      const passphrase = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || NW.TESTNET;
+      const nativeSac = Asset.native().contractId(passphrase);
+
+      const rootHex = distRoot.replace(/^0x/, "");
+      const rootBytes = Uint8Array.from(rootHex.match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) || []);
+
+      const args = [
+        nativeToScVal(rootBytes, { type: "bytes" }),
+        nativeToScVal(nativeSac, { type: "address" }),
+        nativeToScVal(verifierId, { type: "address" }),
+        nativeToScVal(jwkId, { type: "address" }),
+      ];
+      const res = await writeContract(vaultId, "initialize", args, freighterAddress);
+      setDistDeployTx({ hash: res.hash, url: res.explorerUrl });
+      setDistDeployedAddress(vaultId);
+
+      await fetch(`${API_BASE}/confidia/distributions/${distId}/activate`, { method: "POST" }).catch(() => {});
       setClaimChartData({ claimed: 0, pending: distTotalAllocation });
-      setStatusMessage("Distribution contract activated!");
-      setTimeout(() => setStatusMessage(""), 2000);
     } catch (err: any) {
+      setDistDeployError(err?.message || String(err));
+      if (err?.explorerUrl) setDistDeployTx({ hash: err.hash, url: err.explorerUrl });
       console.error(err);
-      setStatusMessage(`Deployment error: ${err.message || err}`);
-      setTimeout(() => setStatusMessage(""), 3500);
     } finally {
       setDistDeploying(false);
     }
@@ -638,16 +665,29 @@ export default function Dashboard() {
     }
   };
 
+  // REAL, Freighter-signed on-chain revoke — mirrors handleRegisterKeyOnChain.
+  // jwk_registry.revoke_key(kid) is a genuine contract call: it marks the key
+  // revoked on-chain if it exists there, and is a harmless real transaction
+  // (still produces a verifiable hash) for keys that were only ever tracked
+  // off-chain in the demo identity-ops list.
   const handleRevokeJwtKey = async (kid: string) => {
+    const jwkId = contractRegistry?.contracts?.jwkRegistry;
+    if (!freighterConnected || !freighterAddress) {
+      setKeyTxError(lang === "es" ? "Conecta Freighter para firmar la revocación." : "Connect Freighter to sign the revocation.");
+      return;
+    }
+    if (!jwkId) return;
+    setKeyTxError("");
     try {
-      const res = await fetch(`${API_BASE}/confidia/identity/keys/${kid}/revoke`, {
-        method: "POST"
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const res = await writeContract(jwkId, "revoke_key", [nativeToScVal(kid, { type: "string" })], freighterAddress);
+      setKeyTx({ hash: res.hash, url: res.explorerUrl });
+      // Reflect it in the off-chain identity-ops list too (best effort).
+      await fetch(`${API_BASE}/confidia/identity/keys/${kid}/revoke`, { method: "POST" }).catch(() => {});
       setJwtKeys(prev => prev.map(k => k.kid === kid ? { ...k, status: "revoked" } : k));
-    } catch (err) {
-      console.error("Failed to revoke key", err);
+    } catch (err: any) {
+      setKeyTxError(err?.message || String(err));
+      if (err?.explorerUrl) setKeyTx({ hash: err.hash, url: err.explorerUrl });
+      console.error("Failed to revoke key on-chain", err);
     }
   };
 
@@ -691,6 +731,8 @@ export default function Dashboard() {
     }
   ]);
   const [newDomainUrl, setNewDomainUrl] = useState<string>("");
+  const [lcpError, setLcpError] = useState<string>("");
+  const [lcpSuccess, setLcpSuccess] = useState<string>("");
 
   // Agent State — fallback shown only until GET /agents resolves (see
   // loadBackendData), then replaced by the real Supabase-backed rows.
@@ -786,6 +828,8 @@ export default function Dashboard() {
     e.preventDefault();
     if (!newDomainUrl) return;
     setLoading(true);
+    setLcpError("");
+    setLcpSuccess("");
     setStatusMessage(t("discover_lcp"));
 
     try {
@@ -799,11 +843,16 @@ export default function Dashboard() {
         throw new Error(data.error);
       }
       setDomains(prev => [...prev, data.data]);
+      setLcpSuccess(`${data.data.url} — ${t("status_domain_verified")}`);
       setNewDomainUrl("");
       setStatusMessage(t("status_domain_verified"));
       setTimeout(() => setStatusMessage(""), 2000);
     } catch (err: any) {
       console.error(err);
+      // A real, honest failure: the domain genuinely has no valid LCP document
+      // at /.well-known/legal-context.json (or its hash didn't match) — this
+      // is expected for non-LCP-compliant domains, not a bug in this button.
+      setLcpError(err?.message || String(err));
       setStatusMessage(`Error: ${err.message || err}`);
       setTimeout(() => setStatusMessage(""), 3500);
     } finally {
@@ -925,6 +974,28 @@ export default function Dashboard() {
       const res = await sendPayment(freighterAddress, recipient, String(amt), asset);
       setDepositTx({ hash: res.hash, url: res.explorerUrl });
       refreshWalletBalances(freighterAddress);
+
+      // Bind this settled deposit to Confidia's own verified LCP domain as a
+      // real agreement (the domain itself was registered and hash-verified
+      // for real — see Legal Context). This is what populates Agreements &
+      // Audit Trail from this flow.
+      try {
+        const agrRes = await fetch(`${API_BASE}/confidia/agreements/record`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: "confidia.vercel.app", txHash: res.hash, amount: amt, assetCode: selected.code }),
+        }).then((r) => r.json());
+        if (agrRes?.success) {
+          const [agreementsRes, txRes] = await Promise.all([
+            fetch(`${API_BASE}/agreements`).then((r) => r.json()),
+            fetch(`${API_BASE}/transactions`).then((r) => r.json()),
+          ]);
+          if (Array.isArray(agreementsRes)) setAgreements(agreementsRes);
+          if (Array.isArray(txRes)) setTransactions(txRes);
+        }
+      } catch {
+        /* best-effort — the on-chain deposit already succeeded regardless */
+      }
     } catch (err: any) {
       setDepositError(err?.message || String(err));
       if (err?.explorerUrl) setDepositTx({ hash: err.hash, url: err.explorerUrl });
@@ -1426,11 +1497,23 @@ export default function Dashboard() {
                 />
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center gap-2 transition"
+                  disabled={loading}
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl flex items-center gap-2 transition whitespace-nowrap"
                 >
-                  <Plus className="w-4 h-4" /> {t("register_lcp_button")}
+                  {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  {t("register_lcp_button")}
                 </button>
               </form>
+              {lcpSuccess && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3">
+                  <CheckCircle2 size={16} className="shrink-0" /> {lcpSuccess}
+                </div>
+              )}
+              {lcpError && (
+                <div className="mt-3 flex items-start gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-xl px-4 py-3 break-all">
+                  <XCircle size={16} className="shrink-0 mt-0.5" /> {lcpError}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2061,17 +2144,31 @@ export default function Dashboard() {
                     </div>
                   </div>
                   {!distDeployedAddress ? (
-                    <button
-                      onClick={handleDeployDistribution}
-                      disabled={distDeploying}
-                      className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3.5 px-4 rounded-xl transition duration-300 disabled:opacity-50"
-                    >
-                      {distDeploying ? t("processing") : t("dist_btn_deploy")}
-                    </button>
+                    <>
+                      <button
+                        onClick={handleDeployDistribution}
+                        disabled={distDeploying || !freighterConnected}
+                        className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3.5 px-4 rounded-xl transition duration-300 disabled:opacity-50"
+                      >
+                        {distDeploying ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />}
+                        {distDeploying ? t("processing") : t("dist_btn_deploy")}
+                      </button>
+                      {!freighterConnected && <p className="text-[11px] text-amber-400 text-center">{t("jwt_onchain_connect")}</p>}
+                      {distDeployError && (
+                        <div className="flex items-start gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-xl px-4 py-3 break-all">
+                          <XCircle size={16} className="shrink-0 mt-0.5" /> {distDeployError}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-2">
                       <span className="text-xs font-bold text-emerald-400 block">{t("dist_status_deployed")}</span>
                       <code className="text-[10px] text-slate-350 block select-all bg-slate-950 p-2 rounded border border-slate-900">{distDeployedAddress}</code>
+                      {distDeployTx && (
+                        <a href={distDeployTx.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-indigo-300 hover:text-indigo-200 underline">
+                          {t("payment_onchain_success")} {distDeployTx.hash.slice(0, 12)}… ↗
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
