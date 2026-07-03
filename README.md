@@ -12,6 +12,11 @@
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License" />
 </p>
 
+<p align="center">
+  <strong>🔗 Live demo: <a href="https://confidia.vercel.app">confidia.vercel.app</a></strong><br/>
+  <sub>Dashboard on Vercel · contracts live on Stellar Testnet · try the <em>Security → Run Live Check</em> button</sub>
+</p>
+
 ---
 
 ## Overview

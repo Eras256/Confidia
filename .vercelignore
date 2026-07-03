@@ -1,0 +1,32 @@
+# Ignorar node_modules locales
+node_modules
+**/node_modules
+
+# Ignorar contratos en Rust y compilación Rust (pesa mucho)
+contracts
+**/target
+
+# Ignorar otras apps no frontend
+apps/api
+apps/worker
+
+# Ignorar base de datos y archivos locales de desarrollo
+db.json
+.env*.local
+.env.development
+.env.production
+.env.test
+
+# Ignorar carpetas de control de versiones y del agente
+.git
+.github
+.agents
+.vscode
+.gemini
+.next
+**/out
+**/dist
+
+# Ignorar documentaciones pesadas si las hay
+*.md
+docs
