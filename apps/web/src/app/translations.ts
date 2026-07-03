@@ -60,6 +60,8 @@ export const translations = {
 
     // Domain Management
     register_lcp_title: "Configure Legal Compliance Domain",
+    register_lcp_desc: "Provide the counterparty's bare domain (e.g. example.com — no https://, no path) to fetch and verify their on-chain compliance metadata.",
+    register_lcp_placeholder: "e.g. counterparty.example.com",
     register_lcp_button: "Verify Domain LCP",
     active_agents_title: "Automated Distribution Assistants",
     agent_pub_key: "Assistant Public Key",
@@ -330,6 +332,8 @@ export const translations = {
 
     // Domain Management
     register_lcp_title: "Configurar Dominio de Cumplimiento Legal",
+    register_lcp_desc: "Ingresa solo el dominio de la contraparte (ej. example.com — sin https://, sin ruta) para consultar y verificar sus metadatos de cumplimiento on-chain.",
+    register_lcp_placeholder: "ej. contraparte.example.com",
     register_lcp_button: "Verificar LCP del Dominio",
     active_agents_title: "Asistentes de Distribución Automatizados",
     agent_pub_key: "Clave Pública del Asistente",

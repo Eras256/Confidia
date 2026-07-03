@@ -867,11 +867,17 @@ export default function Dashboard() {
     setLcpSuccess("");
     setStatusMessage(t("discover_lcp"));
 
+    // The API only wants a bare hostname (it builds the /.well-known/... path
+    // itself) — if someone pastes a full URL (protocol and/or path included,
+    // e.g. copying the .well-known link straight from an error message), strip
+    // it down rather than sending a malformed double-prefixed URL to fetch().
+    const bareDomain = newDomainUrl.trim().replace(/^https?:\/\//i, "").split("/")[0];
+
     try {
       const res = await fetch(`${API_BASE}/domains/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: newDomainUrl, tenantId: "tenant-1" })
+        body: JSON.stringify({ url: bareDomain, tenantId: "tenant-1" })
       });
       const data = await res.json();
       if (data.error) {
@@ -1543,11 +1549,11 @@ export default function Dashboard() {
           <div className="space-y-8">
             <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/30 backdrop-blur-md">
               <h3 className="text-lg font-bold text-white mb-2">{t("register_lcp_title")}</h3>
-              <p className="text-xs text-slate-400 mb-4">Provide the Counterparty DNS domain to fetch and verify their on-chain compliance metadata.</p>
+              <p className="text-xs text-slate-400 mb-4">{t("register_lcp_desc")}</p>
               <form onSubmit={handleRegisterDomain} className="flex flex-col sm:flex-row gap-3">
                 <input
                   type="text"
-                  placeholder="e.g. counterparty.example.com"
+                  placeholder={t("register_lcp_placeholder")}
                   value={newDomainUrl}
                   onChange={(e) => setNewDomainUrl(e.target.value)}
                   className="flex-1 px-4 py-3 rounded-xl bg-slate-950 border border-slate-900 text-slate-200 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
