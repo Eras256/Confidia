@@ -154,11 +154,14 @@ insert into tenants (id, name) values
   ('tenant-1', 'Confidia Institutional Dev')
 on conflict (id) do nothing;
 
-insert into domains (id, tenant_id, url, lcp_json, atr_hash, verified_at, status) values
-  ('domain-1', 'tenant-1', 'treasury.example.mx',
-   '{"terms":"https://treasury.example.mx/terms.md","atrHash":"a47d2f93d8b5c90d8108c148a1d65d648fc92c0192e46b08e24dc1a64bc1ae82","termsFormat":"md","acceptanceRequired":true,"jurisdiction":"MX","disputeResolution":"UNCITRAL","consentModel":"opt-in"}'::jsonb,
-   'a47d2f93d8b5c90d8108c148a1d65d648fc92c0192e46b08e24dc1a64bc1ae82', now(), 'verified')
-on conflict (id) do nothing;
+-- No seeded domain rows: "domains" only ever contains entries that genuinely
+-- passed real LCP verification through /domains/register (real HTTPS fetch +
+-- real SHA-256 hash check). A prior seed here ('treasury.example.mx', marked
+-- 'verified') never resolved on the real internet and could never actually
+-- pass that check — exactly the kind of fake-presented-as-real data this
+-- project's real Legal Context flow is supposed to catch. Register a real
+-- domain (e.g. confidia.vercel.app, which genuinely publishes LCP files)
+-- through the app instead.
 
 insert into policies (id, tenant_id, name, rules) values
   ('policy-1', 'tenant-1', 'Treasury Limits',
@@ -173,7 +176,7 @@ insert into agents (id, tenant_id, name, capabilities, bound_domains, keys, stat
    'active'),
   ('agent-2', 'tenant-1', 'Distribution Agent',
    '["standard","confidential"]'::jsonb,
-   '["treasury.example.mx"]'::jsonb,
+   '["confidia.vercel.app"]'::jsonb,
    '{"publicKey":"GCP5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2PAYROLLKEY"}'::jsonb,
    'active')
 on conflict (id) do nothing;

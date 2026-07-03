@@ -766,35 +766,10 @@ export default function Dashboard() {
     return translations[lang][key] || translations.en[key];
   };
 
-  // Domain Management State
-  const [domains, setDomains] = useState<any[]>([
-    {
-      id: "domain-1",
-      url: "treasury.example.mx",
-      lcp_json: {
-        terms: "https://treasury.example.mx/terms.md",
-        atrHash: "a47d2f93d8b5c90d8108c148a1d65d648fc92c0192e46b08e24dc1a64bc1ae82",
-        acceptanceRequired: true,
-        jurisdiction: "MX",
-        disputeResolution: "UNCITRAL",
-        consentModel: "opt-in"
-      },
-      status: "verified"
-    },
-    {
-      id: "domain-2",
-      url: "issuer.example.com",
-      lcp_json: {
-        terms: "https://issuer.example.com/legal.md",
-        atrHash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        acceptanceRequired: false,
-        jurisdiction: "US-DE",
-        disputeResolution: "AAA",
-        consentModel: "opt-in"
-      },
-      status: "verified"
-    }
-  ]);
+  // Domain Management State — starts empty; loadBackendData() below fetches
+  // the real, Supabase-backed rows (only domains that genuinely passed LCP
+  // hash verification ever land here — see /domains/register).
+  const [domains, setDomains] = useState<any[]>([]);
   const [newDomainUrl, setNewDomainUrl] = useState<string>("");
   const [lcpError, setLcpError] = useState<string>("");
   const [lcpSuccess, setLcpSuccess] = useState<string>("");
@@ -814,7 +789,7 @@ export default function Dashboard() {
       id: "agent-2",
       name: "Distribution Agent",
       capabilities: ["standard", "confidential"],
-      bound_domains: ["treasury.example.mx"],
+      bound_domains: ["confidia.vercel.app"],
       status: "active",
       pubKey: "GCP5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2PAYROLLKEY"
     }
@@ -834,40 +809,14 @@ export default function Dashboard() {
     }
   ]);
 
-  // Transaction state
-  const [transactions, setTransactions] = useState<TransactionItem[]>([
-    {
-      id: "tx-72049",
-      domain: "treasury.example.mx",
-      amount: 15000,
-      tokenType: "confidential",
-      status: "Completed",
-      atrHash: "a47d2f93d8b5c90d8108c148a1d65d648fc92c0192e46b08e24dc1a64bc1ae82",
-      created_at: new Date().toISOString()
-    },
-    {
-      id: "tx-12048",
-      domain: "issuer.example.com",
-      amount: 3200,
-      tokenType: "standard",
-      status: "Completed",
-      atrHash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      created_at: new Date(Date.now() - 3600000 * 4).toISOString()
-    }
-  ]);
+  // Transaction state — starts empty; loadBackendData() below fetches the
+  // real, Supabase-backed rows (only genuinely settled on-chain transactions
+  // ever land here).
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
 
-  // Agreements State
-  const [agreements, setAgreements] = useState<any[]>([
-    {
-      id: "agr-89024",
-      domain: "treasury.example.mx",
-      agentId: "agent-1",
-      atrHash: "a47d2f93d8b5c90d8108c148a1d65d648fc92c0192e46b08e24dc1a64bc1ae82",
-      consentTimestamp: new Date().toISOString(),
-      signature: "0xa841b9d7...sigbytes",
-      status: "signed"
-    }
-  ]);
+  // Agreements State — same: starts empty, populated only by real settled
+  // actions bound to a verified LCP domain (see /confidia/agreements/record).
+  const [agreements, setAgreements] = useState<any[]>([]);
 
   // Real Overview-tab KPI/chart data — fetched from Supabase-backed list
   // endpoints (no hardcoded totals). Starts empty; loadBackendData() below
@@ -878,7 +827,7 @@ export default function Dashboard() {
 
   // Form State for Execution simulation
   const [execAgentId, setExecAgentId] = useState<string>("agent-1");
-  const [execDomain, setExecDomain] = useState<string>("treasury.example.mx");
+  const [execDomain, setExecDomain] = useState<string>("confidia.vercel.app");
   const [execAmount, setExecAmount] = useState<number>(10);
   const [lastPaymentTx, setLastPaymentTx] = useState<{ hash: string; url: string } | null>(null);
 
