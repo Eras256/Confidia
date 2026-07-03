@@ -106,7 +106,9 @@ app.get("/status", (c) => {
     status: "online",
     system: "Confidia API Gateway",
     protocolVersion: "LCP-1.0.0",
-    stellarProtocol: "Protocol 25 (Dev Preview)"
+    stellarProtocol: "Protocol 25 (Dev Preview)",
+    // Honest, real reflection of the backing store — not a client-side toggle.
+    persistence: supabaseUrl && supabaseServiceRoleKey ? "supabase" : "mock-file",
   });
 });
 
@@ -344,6 +346,61 @@ app.get("/transactions", async (c) => {
 app.get("/agreements", async (c) => {
   const list = await supabase.from("agreements").select();
   return c.json(list.data);
+});
+
+app.get("/agents", async (c) => {
+  const list = await supabase.from("agents").select();
+  return c.json(list.data);
+});
+
+// Records a real, already-settled on-chain transaction (a genuine Stellar tx
+// hash the caller obtained from a signed payment) as an agreement bound to a
+// verified LCP domain. Rejects domains that haven't passed real LCP hash
+// verification (see /domains/register) — this is what makes the Agreements &
+// Audit Trail tab populate from actual signed actions instead of being empty.
+app.post("/confidia/agreements/record", async (c) => {
+  const { domain, txHash, amount, assetCode, agentId } = await c.req.json();
+  if (!domain || !txHash) {
+    return c.json({ error: "Missing domain or txHash" }, 400);
+  }
+  try {
+    const domainRes = await supabase.from("domains").select().eq("url", domain).single();
+    const domainRecord = domainRes.data;
+    if (!domainRecord || domainRecord.status !== "verified") {
+      return c.json({ error: `Domain '${domain}' is not a verified LCP counterparty. Register it first.` }, 422);
+    }
+
+    const consentTimestamp = new Date().toISOString();
+    const signature = require("crypto")
+      .createHash("sha256")
+      .update(`${domain}:${txHash}:${domainRecord.atr_hash}:${consentTimestamp}`)
+      .digest("hex");
+
+    const agreementRes = await supabase.from("agreements").insert({
+      tenant_id: "tenant-1",
+      domain_id: domainRecord.id,
+      agent_id: agentId || null,
+      atr_hash: domainRecord.atr_hash,
+      signed_terms: JSON.stringify({ txHash, amount, assetCode }),
+      consent_timestamp: consentTimestamp,
+      signature,
+      status: "signed",
+    }).select().single();
+
+    await supabase.from("transactions").insert({
+      tenant_id: "tenant-1",
+      type: "payment",
+      amount: amount || 0,
+      asset_id: assetCode || "XLM",
+      status: "completed",
+      proof_type: "none",
+      on_chain_tx: txHash,
+    });
+
+    return c.json({ success: true, agreement: agreementRes.data });
+  } catch (error: any) {
+    return c.json({ error: `Failed to record agreement: ${error.message}` }, 500);
+  }
 });
 
 // 7. Zarf-inspired Private Distributions Endpoints

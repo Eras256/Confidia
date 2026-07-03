@@ -1,0 +1,9 @@
+{
+  "terms": "https://confidia.vercel.app/legal/terms.md",
+  "atrHash": "105e6502824ee9fe59add59565cfe52799e3cf540c54952a1f688723f53f0010",
+  "termsFormat": "md",
+  "acceptanceRequired": true,
+  "jurisdiction": "US-DE",
+  "disputeResolution": "UNCITRAL",
+  "consentModel": "opt-in"
+}

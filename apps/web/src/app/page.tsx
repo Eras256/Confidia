@@ -44,6 +44,7 @@ import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const SESSION_STORAGE_KEY = "confidia_session_v1"; // { address, token, exp }
 const LANG_STORAGE_KEY = "confidia_lang";
+const SETTINGS_STORAGE_KEY = "confidia_settings_v1";
 
 // Build-time fallback for the on-chain contract registry. Next.js inlines
 // NEXT_PUBLIC_* at build time, so the deployed addresses render even when the
@@ -111,6 +112,50 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false); // mobile nav drawer
   const [claimCountdown, setClaimCountdown] = useState<number>(300); // 5 minutes countdown
   const [contractRegistry, setContractRegistry] = useState<any>(ENV_REGISTRY);
+  // Real, honest indicator of the API's actual backing store (fetched from
+  // /status) — not a client-side dropdown that implies switching does anything.
+  const [persistenceMode, setPersistenceMode] = useState<string>("");
+  // Settings — real controlled state, persisted to localStorage so it
+  // survives a refresh (client-side operator preferences; there is no shared
+  // backend table for these, so localStorage is the correct persistence layer).
+  const [settingsEntityName, setSettingsEntityName] = useState<string>("Institutional Treasury Org");
+  const [settingsGasLimit, setSettingsGasLimit] = useState<string>("5000000");
+  const [settingsConfidentialWrapper, setSettingsConfidentialWrapper] = useState<boolean>(true);
+  const [settingsZkKyc, setSettingsZkKyc] = useState<boolean>(true);
+  const [settingsZkVm, setSettingsZkVm] = useState<boolean>(false);
+  const [settingsSaved, setSettingsSaved] = useState<boolean>(false);
+
+  // Restore Settings from localStorage on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.entityName) setSettingsEntityName(saved.entityName);
+      if (saved.gasLimit) setSettingsGasLimit(saved.gasLimit);
+      if (typeof saved.confidentialWrapper === "boolean") setSettingsConfidentialWrapper(saved.confidentialWrapper);
+      if (typeof saved.zkKyc === "boolean") setSettingsZkKyc(saved.zkKyc);
+      if (typeof saved.zkVm === "boolean") setSettingsZkVm(saved.zkVm);
+    } catch {
+      /* ignore corrupt local storage */
+    }
+  }, []);
+
+  // Persist Settings on every change (debounced visual "Saved" confirmation).
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+      entityName: settingsEntityName,
+      gasLimit: settingsGasLimit,
+      confidentialWrapper: settingsConfidentialWrapper,
+      zkKyc: settingsZkKyc,
+      zkVm: settingsZkVm,
+    }));
+    setSettingsSaved(true);
+    const t = setTimeout(() => setSettingsSaved(false), 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsEntityName, settingsGasLimit, settingsConfidentialWrapper, settingsZkKyc, settingsZkVm]);
+
   // On-chain "register OIDC key" flow (Identity Ops) — real, Freighter-signed
   const [newKeyKid, setNewKeyKid] = useState<string>("google-oauth-2026");
   const [keyRegistering, setKeyRegistering] = useState<boolean>(false);
@@ -171,6 +216,21 @@ export default function Dashboard() {
         const contractsRes = await fetch(`${API_BASE}/confidia/contracts`).then(r => r.json());
         if (contractsRes && contractsRes.contracts) {
           setContractRegistry(contractsRes);
+        }
+
+        const agentsRes = await fetch(`${API_BASE}/agents`).then(r => r.json());
+        if (Array.isArray(agentsRes) && agentsRes.length > 0) {
+          setAgents(agentsRes.map((a: any) => ({
+            ...a,
+            pubKey: a.keys?.publicKey || a.pubKey || "—",
+            capabilities: a.capabilities || [],
+            bound_domains: a.bound_domains || [],
+          })));
+        }
+
+        const statusRes = await fetch(`${API_BASE}/status`).then(r => r.json());
+        if (statusRes?.persistence) {
+          setPersistenceMode(statusRes.persistence);
         }
       } catch (err) {
         console.error("Failed to load initial data from Confidia API", err);
@@ -632,23 +692,24 @@ export default function Dashboard() {
   ]);
   const [newDomainUrl, setNewDomainUrl] = useState<string>("");
 
-  // Agent State
+  // Agent State — fallback shown only until GET /agents resolves (see
+  // loadBackendData), then replaced by the real Supabase-backed rows.
   const [agents, setAgents] = useState<any[]>([
     {
       id: "agent-1",
-      name: "Arbitrage Agent Alpha",
+      name: "Treasury Operator",
       capabilities: ["standard", "confidential", "zkKYC"],
-      bound_domains: ["treasury.example.mx"],
+      bound_domains: ["confidia.vercel.app"],
       status: "active",
-      pubKey: "GDX...AGENTKEYS"
+      pubKey: "GDS5FCW6N7AW4BRJQS22AYUKYSAMNSHMUUTW6ZKRTYMWMIIJUSN7XAHR"
     },
     {
       id: "agent-2",
-      name: "Payroll Agent Beta",
+      name: "Distribution Agent",
       capabilities: ["standard", "confidential"],
-      bound_domains: ["issuer.example.com"],
+      bound_domains: ["treasury.example.mx"],
       status: "active",
-      pubKey: "GCP...PAYROLLKEYS"
+      pubKey: "GCP5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2PAYROLLKEY"
     }
   ]);
 
@@ -787,6 +848,33 @@ export default function Dashboard() {
         } as TransactionItem,
         ...prev,
       ]);
+
+      // Bind the settled on-chain payment to the selected LCP domain as a real
+      // agreement record (rejected server-side unless the domain has actually
+      // passed real LCP hash verification) — this is what makes Agreements &
+      // Audit Trail populate from genuine actions instead of staying empty.
+      try {
+        log(`[AGREEMENT] Recording under verified LCP domain ${execDomain}…`, "info");
+        const agrRes = await fetch(`${API_BASE}/confidia/agreements/record`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: execDomain, txHash: res.hash, amount: execAmount, assetCode: "XLM", agentId: execAgentId }),
+        }).then((r) => r.json());
+        if (agrRes?.success) {
+          log(`[AGREEMENT] Recorded — ATR ${agrRes.agreement.atr_hash.slice(0, 10)}…`, "success");
+          const [agreementsRes, txRes] = await Promise.all([
+            fetch(`${API_BASE}/agreements`).then((r) => r.json()),
+            fetch(`${API_BASE}/transactions`).then((r) => r.json()),
+          ]);
+          if (Array.isArray(agreementsRes)) setAgreements(agreementsRes);
+          if (Array.isArray(txRes)) setTransactions(txRes);
+        } else {
+          log(`[AGREEMENT] Not recorded: ${agrRes?.error || "unknown error"}`, "warn");
+        }
+      } catch (agrErr: any) {
+        log(`[AGREEMENT] Recording failed: ${agrErr?.message || agrErr}`, "warn");
+      }
+
       setStatusMessage(`${t("status_payment_submitted")} ${res.hash.substring(0, 8)}…`);
       setTimeout(() => setStatusMessage(""), 4000);
     } catch (err: any) {
@@ -1838,7 +1926,12 @@ export default function Dashboard() {
         {/* Tab 8: Settings */}
         {activeTab === "settings" && (
           <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/25 max-w-2xl">
-            <h3 className="text-lg font-bold text-white mb-6">{t("tenant_settings_title")}</h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-white">{t("tenant_settings_title")}</h3>
+              <span className={`text-[10px] font-bold uppercase tracking-widest transition-opacity ${settingsSaved ? "opacity-100 text-emerald-400" : "opacity-0"}`}>
+                {t("settings_saved")}
+              </span>
+            </div>
 
             <div className="space-y-6 text-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1846,40 +1939,64 @@ export default function Dashboard() {
                   <label className="text-[10px] text-slate-500 block mb-2 font-mono uppercase font-bold tracking-widest">{t("tenant_name")}</label>
                   <input
                     type="text"
-                    defaultValue="Institutional Treasury Org"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-350 focus:outline-none"
+                    value={settingsEntityName}
+                    onChange={(e) => setSettingsEntityName(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-350 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
                 <div>
                   <label className="text-[10px] text-slate-500 block mb-2 font-mono uppercase font-bold tracking-widest">{t("default_gas_limit")}</label>
                   <input
                     type="number"
-                    defaultValue="5000000"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-350 focus:outline-none"
+                    value={settingsGasLimit}
+                    onChange={(e) => setSettingsGasLimit(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-350 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="text-[10px] text-slate-500 block mb-2 font-mono uppercase font-bold tracking-widest">{t("db_persistence")}</label>
-                <select className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-350 focus:outline-none">
-                  <option value="supabase">Supabase cloud integration</option>
-                  <option value="sqlite">Local mock SQLite mode</option>
-                </select>
+                <div className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 flex items-center justify-between">
+                  <span className="text-slate-300 font-semibold">
+                    {persistenceMode === "supabase" ? "Supabase (Postgres) — live" : persistenceMode === "mock-file" ? "File-backed mock (db.json)" : t("checking")}
+                  </span>
+                  {persistenceMode === "supabase" && (
+                    <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold uppercase">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> {t("live_badge")}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1.5">{t("db_persistence_note")}</p>
               </div>
 
               <div className="space-y-3 pt-4 border-t border-slate-900/60">
                 <h4 className="font-bold text-indigo-400 font-mono text-[10px] uppercase tracking-widest">{t("feature_toggles")}</h4>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded border-slate-800 text-indigo-600 focus:ring-indigo-500 bg-slate-950" />
+                  <input
+                    type="checkbox"
+                    checked={settingsConfidentialWrapper}
+                    onChange={(e) => setSettingsConfidentialWrapper(e.target.checked)}
+                    className="rounded border-slate-800 text-indigo-600 focus:ring-indigo-500 bg-slate-950"
+                  />
                   <span>{t("confidential_wrapper_opt")}</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded border-slate-800 text-indigo-600 focus:ring-indigo-500 bg-slate-950" />
+                  <input
+                    type="checkbox"
+                    checked={settingsZkKyc}
+                    onChange={(e) => setSettingsZkKyc(e.target.checked)}
+                    className="rounded border-slate-800 text-indigo-600 focus:ring-indigo-500 bg-slate-950"
+                  />
                   <span>{t("zk_kyc_opt")}</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" className="rounded border-slate-800 text-indigo-600 focus:ring-indigo-500 bg-slate-950" />
+                  <input
+                    type="checkbox"
+                    checked={settingsZkVm}
+                    onChange={(e) => setSettingsZkVm(e.target.checked)}
+                    className="rounded border-slate-800 text-indigo-600 focus:ring-indigo-500 bg-slate-950"
+                  />
                   <span>{t("zk_vm_opt")}</span>
                 </label>
               </div>
@@ -2173,6 +2290,7 @@ export default function Dashboard() {
                 <div className="p-6 rounded-2xl border border-slate-900 bg-slate-950 space-y-4">
                   <h4 className="text-xs font-bold text-indigo-400 font-mono uppercase tracking-widest flex items-center gap-1.5">
                     <Terminal className="w-4 h-4" /> ZK-CLAIM PROVER TERMINAL
+                    <span className="text-[9px] font-sans normal-case tracking-normal text-slate-500">({t("simulated_log_tag")})</span>
                   </h4>
                   <div className="font-mono text-xs space-y-2">
                     {claimLogs.map((log, idx) => (

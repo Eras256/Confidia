@@ -56,10 +56,19 @@ export class MockSupabaseClient {
         {
           id: "agent-1",
           tenant_id: "tenant-1",
-          name: "Agent Gold",
+          name: "Treasury Operator",
           capabilities: ["standard", "confidential", "zkKYC"],
+          bound_domains: ["confidia.vercel.app"],
+          keys: { publicKey: "GDS5FCW6N7AW4BRJQS22AYUKYSAMNSHMUUTW6ZKRTYMWMIIJUSN7XAHR" },
+          status: "active"
+        },
+        {
+          id: "agent-2",
+          tenant_id: "tenant-1",
+          name: "Distribution Agent",
+          capabilities: ["standard", "confidential"],
           bound_domains: ["treasury.example.mx"],
-          keys: { publicKey: "GDX...AGENTKEYS" },
+          keys: { publicKey: "GCP5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2PAYROLLKEY" },
           status: "active"
         }
       ],

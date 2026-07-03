@@ -30,41 +30,42 @@ export class LcpClient {
 
   /**
    * Discovers and retrieves the legal context from a domain.
+   *
+   * The two named fixture domains (treasury.example.mx, issuer.example.com)
+   * are demo data seeded elsewhere in the app (Overview/Agents cards) and
+   * don't resolve on the real internet, so they always go through the mock.
+   * Every other domain — including the app's own real domain — gets a
+   * genuine network fetch. `isTestEnv` no longer forces the mock path: this
+   * app's API runs with NODE_ENV=development on purpose (see Dockerfile.api),
+   * and gating real network I/O on that flag meant registering any real
+   * domain (e.g. confidia.vercel.app) silently 404'd against the mock.
    */
   public async fetchLegalContext(domain: string): Promise<LcpDocument> {
     const url = `https://${domain}/.well-known/legal-context.json`;
-    if (this.isTestEnv || domain.includes("example.mx") || domain.includes("example.com")) {
+    if (domain.includes("example.mx") || domain.includes("example.com")) {
       return await MockLcpServer.fetchLcp(url);
     }
-    
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch LCP document: ${response.statusText}`);
-      }
-      return await response.json() as LcpDocument;
-    } catch (error) {
-      // Fallback in case of network restrictions
-      return await MockLcpServer.fetchLcp(`https://${domain}/.well-known/legal-context.json`);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch LCP document: ${response.statusText}`);
     }
+    return await response.json() as LcpDocument;
   }
 
   /**
-   * Fetches the raw terms document of the LCP.
+   * Fetches the raw terms document of the LCP. See fetchLegalContext for why
+   * only the named fixture domains use the mock.
    */
   public async fetchTermsDocument(termsUrl: string): Promise<string> {
-    if (this.isTestEnv || termsUrl.includes("example.mx") || termsUrl.includes("example.com")) {
+    if (termsUrl.includes("example.mx") || termsUrl.includes("example.com")) {
       return await MockLcpServer.fetchLcp(termsUrl);
     }
-    try {
-      const response = await fetch(termsUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch terms document: ${response.statusText}`);
-      }
-      return await response.text();
-    } catch (error) {
-      return await MockLcpServer.fetchLcp(termsUrl);
+    const response = await fetch(termsUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch terms document: ${response.statusText}`);
     }
+    return await response.text();
   }
 
   /**

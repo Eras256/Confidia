@@ -166,10 +166,15 @@ insert into policies (id, tenant_id, name, rules) values
 on conflict (id) do nothing;
 
 insert into agents (id, tenant_id, name, capabilities, bound_domains, keys, status) values
-  ('agent-1', 'tenant-1', 'Agent Gold',
+  ('agent-1', 'tenant-1', 'Treasury Operator',
    '["standard","confidential","zkKYC"]'::jsonb,
+   '["confidia.vercel.app"]'::jsonb,
+   '{"publicKey":"GDS5FCW6N7AW4BRJQS22AYUKYSAMNSHMUUTW6ZKRTYMWMIIJUSN7XAHR"}'::jsonb,
+   'active'),
+  ('agent-2', 'tenant-1', 'Distribution Agent',
+   '["standard","confidential"]'::jsonb,
    '["treasury.example.mx"]'::jsonb,
-   '{"publicKey":"GDX...AGENTKEYS"}'::jsonb,
+   '{"publicKey":"GCP5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2PAYROLLKEY"}'::jsonb,
    'active')
 on conflict (id) do nothing;
 
