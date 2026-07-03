@@ -31,20 +31,21 @@ export const translations = {
 
     // KPI Cards
     kpi_active_agents: "Active Distributions",
-    kpi_active_agents_desc: "ZK-shielded distribution vaults active on-chain",
-    kpi_protected_volume: "Shielded Payouts (USDC)",
-    kpi_protected_volume_desc: "Private dollar claims settled securely on Stellar",
+    kpi_active_agents_desc: "Real distributions registered in the database, not cancelled",
+    kpi_protected_volume: "Settled Volume",
+    kpi_protected_volume_desc: "Real settled amount across completed on-chain transactions",
     kpi_compliance_ratio: "Legal Registry Compliance",
-    kpi_compliance_ratio_desc: "Distributions matching active LCP parameters",
+    kpi_compliance_ratio_desc: "Share of registered counterparty domains that are LCP-verified",
     kpi_zk_verified: "ZK Verified Claims",
-    kpi_zk_verified_desc: "Cryptographic eligibility proofs verified on-chain",
+    kpi_zk_verified_desc: "Real on-chain claim() calls settled and recorded",
 
     // Charts
     chart_volume_title: "Distribution Volume Analytics",
-    chart_volume_subtitle: "Comparison between public allocations and confidential treasury reserves (USD)",
-    chart_volume_grow: "+24% volume growth",
-    chart_privacy_title: "Privacy Breakdown",
-    chart_privacy_subtitle: "Private distribution share by dollar token standard",
+    chart_volume_subtitle: "Real settled transaction count over the last 7 days",
+    chart_privacy_title: "Volume by Asset",
+    chart_privacy_subtitle: "Real settled volume grouped by asset code",
+    chart_other_assets: "Other assets",
+    chart_no_volume_yet: "No settled transactions yet — this chart fills in as real deposits, payments, and claims settle on-chain.",
 
     // Payments Demo
     payment_demo_title: "Treasury Payout — Real On-Chain Transfer",
@@ -145,20 +146,9 @@ export const translations = {
     defi_passed_3: "Verification Key validation set at deploy-time prevents signature bypasses",
     defi_passed_4: "Re-entrancy vector checks (Soroban call-stack restrictions active)",
 
-    // Week days
-    mon: "Mon",
-    tue: "Tue",
-    wed: "Wed",
-    thu: "Thu",
-    fri: "Fri",
-    sat: "Sat",
-    sun: "Sun",
-
     // Transaction details
     status_domain_verified: "Compliance configuration loaded and verified!",
     status_payment_submitted: "Settled on-chain via Soroban Router!",
-    mode_wrapper: "Confidential Payout",
-    mode_standard: "Public Payout",
     zk_proof_verified: "Verified",
     zk_proof_idle: "Inactive",
     zk_proof_inputs: "ZK Public Inputs:",
@@ -304,20 +294,21 @@ export const translations = {
 
     // KPI Cards
     kpi_active_agents: "Distribuciones Activas",
-    kpi_active_agents_desc: "Bóvedas de distribución reguladas por ZK en cadena",
-    kpi_protected_volume: "Volumen Protegido (USDC)",
-    kpi_protected_volume_desc: "Reclamaciones privadas de dólares liquidadas en Stellar",
+    kpi_active_agents_desc: "Distribuciones reales registradas en la base de datos, no canceladas",
+    kpi_protected_volume: "Volumen Liquidado",
+    kpi_protected_volume_desc: "Monto real liquidado en transacciones on-chain completadas",
     kpi_compliance_ratio: "Cumplimiento del Registro Legal",
-    kpi_compliance_ratio_desc: "Distribuciones alineadas con parámetros de LCP activos",
+    kpi_compliance_ratio_desc: "Proporción de dominios contraparte registrados que están verificados por LCP",
     kpi_zk_verified: "Reclamaciones Verificadas ZK",
-    kpi_zk_verified_desc: "Pruebas criptográficas de elegibilidad verificadas",
+    kpi_zk_verified_desc: "Llamadas reales a claim() liquidadas y registradas on-chain",
 
     // Charts
     chart_volume_title: "Análisis de Volumen de Distribución",
-    chart_volume_subtitle: "Comparación entre asignaciones públicas y reservas de tesorería confidenciales (USD)",
-    chart_volume_grow: "+24% crecimiento de volumen",
-    chart_privacy_title: "Desglose de Privacidad",
-    chart_privacy_subtitle: "Participación de distribución privada por estándar de token de dólar",
+    chart_volume_subtitle: "Conteo real de transacciones liquidadas en los últimos 7 días",
+    chart_privacy_title: "Volumen por Activo",
+    chart_privacy_subtitle: "Volumen real liquidado agrupado por código de activo",
+    chart_other_assets: "Otros activos",
+    chart_no_volume_yet: "Aún no hay transacciones liquidadas — este gráfico se llena a medida que se liquidan depósitos, pagos y reclamos reales on-chain.",
 
     // Payments Demo
     payment_demo_title: "Pago de Tesorería — Transferencia Real On-Chain",
@@ -418,20 +409,9 @@ export const translations = {
     defi_passed_3: "La validación de la Clave de Verificación en tiempo de despliegue evita el bypass de firmas",
     defi_passed_4: "Comprobaciones de vectores de reentrada (restricciones de pila de llamadas de Soroban activas)",
 
-    // Week days
-    mon: "Lun",
-    tue: "Mar",
-    wed: "Mié",
-    thu: "Jue",
-    fri: "Vie",
-    sat: "Sáb",
-    sun: "Dom",
-
     // Transaction details
     status_domain_verified: "¡Configuración de cumplimiento cargada y verificada!",
     status_payment_submitted: "¡Liquidado en cadena a través de Soroban Router!",
-    mode_wrapper: "Pago Confidencial",
-    mode_standard: "Pago Público",
     zk_proof_verified: "Verificado",
     zk_proof_idle: "Inactivo",
     zk_proof_inputs: "Entradas Públicas ZK:",

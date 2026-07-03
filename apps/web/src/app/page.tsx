@@ -212,6 +212,16 @@ export default function Dashboard() {
           setTransactions(transactionsRes);
         }
 
+        const distributionsRes = await fetch(`${API_BASE}/confidia/distributions`).then(r => r.json());
+        if (Array.isArray(distributionsRes)) {
+          setAllDistributions(distributionsRes);
+        }
+
+        const claimsRes = await fetch(`${API_BASE}/confidia/claims`).then(r => r.json());
+        if (Array.isArray(claimsRes)) {
+          setAllClaims(claimsRes);
+        }
+
         const contractsRes = await fetch(`${API_BASE}/confidia/contracts`).then(r => r.json());
         if (contractsRes && contractsRes.contracts) {
           setContractRegistry(contractsRes);
@@ -484,6 +494,7 @@ export default function Dashboard() {
       setDistTotalAllocation(data.merkle.totalAllocation);
       setDistTotalRecipients(data.merkle.recipientCount);
       setDistRoot(data.merkle.root);
+      setAllDistributions((prev) => [data.distribution, ...prev]);
       setStatusMessage("Distribution package prepared successfully.");
       setTimeout(() => setStatusMessage(""), 2000);
     } catch (err: any) {
@@ -541,6 +552,7 @@ export default function Dashboard() {
       setDistDeployedAddress(vaultId);
 
       await fetch(`${API_BASE}/confidia/distributions/${distId}/activate`, { method: "POST" }).catch(() => {});
+      setAllDistributions((prev) => prev.map((d) => (d.id === distId ? { ...d, status: "active" } : d)));
       setClaimChartData({ claimed: 0, pending: distTotalAllocation });
     } catch (err: any) {
       setDistDeployError(err?.explorerUrl ? `${err.message || err} (tx: ${err.hash})` : (err?.message || String(err)));
@@ -641,6 +653,24 @@ export default function Dashboard() {
       });
       if (claimScenario === "happy") {
         setLastClaimNullifier(nullifierHex);
+        // Best-effort: the on-chain claim already settled regardless of
+        // whether this recording call succeeds — it only backs the Overview
+        // tab's real "ZK Verified Claims" counter, matching the pattern
+        // used for agreements after a deposit/payment.
+        try {
+          const recordRes = await fetch(`${API_BASE}/confidia/claims/record`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nullifier: nullifierHex, recipient: freighterAddress, amount: CLAIM_AMOUNT_STROOPS / 1e7, vaultId }),
+          }).then((r) => r.json());
+          if (recordRes?.success) {
+            setAllClaims((prev) => [recordRes.claim, ...prev]);
+          } else {
+            console.error("Claim recording did not succeed:", recordRes);
+          }
+        } catch (recErr) {
+          console.error("Failed to record real claim for Overview KPIs:", recErr);
+        }
       }
     } catch (err: any) {
       if (claimScenario === "happy") {
@@ -838,6 +868,13 @@ export default function Dashboard() {
       status: "signed"
     }
   ]);
+
+  // Real Overview-tab KPI/chart data — fetched from Supabase-backed list
+  // endpoints (no hardcoded totals). Starts empty; loadBackendData() below
+  // populates it on mount and after every real action that should move these
+  // numbers (a real claim, a new distribution, a settled payment).
+  const [allDistributions, setAllDistributions] = useState<any[]>([]);
+  const [allClaims, setAllClaims] = useState<any[]>([]);
 
   // Form State for Execution simulation
   const [execAgentId, setExecAgentId] = useState<string>("agent-1");
@@ -1067,6 +1104,61 @@ export default function Dashboard() {
     }
   };
 
+  // Real Overview-tab KPIs and charts — derived entirely from fetched,
+  // Supabase-backed state (domains/transactions/allDistributions/allClaims).
+  // Nothing here is a hardcoded number; every value moves the moment a real
+  // action (a deposit, a payment, a distribution, a real on-chain claim)
+  // happens anywhere in the app.
+  const kpiActiveDistributions = allDistributions.filter((d: any) => d?.status !== "cancelled").length;
+  const completedTransactions = transactions.filter((tx: any) => (tx.status || "").toLowerCase() === "completed");
+  const assetTotals: Record<string, number> = {};
+  completedTransactions.forEach((tx: any) => {
+    const code = tx.asset_id || tx.tokenType || "XLM";
+    assetTotals[code] = (assetTotals[code] || 0) + (Number(tx.amount) || 0);
+  });
+  const assetCodes = Object.keys(assetTotals).sort((a, b) => assetTotals[b] - assetTotals[a]);
+  const totalSettledVolume = assetCodes.reduce((sum, c) => sum + assetTotals[c], 0);
+  const kpiSettledVolumeLabel = assetCodes.length === 0
+    ? "0"
+    : assetCodes.length === 1
+      ? `${assetTotals[assetCodes[0]].toLocaleString()} ${assetCodes[0]}`
+      : `${completedTransactions.length} ${lang === "es" ? "txs" : "txs"}`;
+  const kpiComplianceRatio = domains.length > 0
+    ? Math.round((domains.filter((d: any) => d.status === "verified").length / domains.length) * 100)
+    : 0;
+  const kpiZkVerifiedClaims = allClaims.length;
+
+  // Real last-7-calendar-days settled-transaction-count series — a polyline
+  // through actual daily counts, not a fabricated smooth curve.
+  const DAY_MS = 86400000;
+  const last7Days = Array.from({ length: 7 }, (_, i) => new Date(Date.now() - (6 - i) * DAY_MS));
+  const dayCounts = last7Days.map((day) => {
+    const key = day.toISOString().slice(0, 10);
+    return completedTransactions.filter((tx: any) => String(tx.created_at || "").slice(0, 10) === key).length;
+  });
+  const dayLabels = last7Days.map((d) =>
+    new Intl.DateTimeFormat(lang === "es" ? "es-ES" : "en-US", { weekday: "short" }).format(d)
+  );
+  const maxDayCount = Math.max(1, ...dayCounts);
+  const CHART_W = 600;
+  const CHART_H = 220;
+  const chartPoints = dayCounts.map((count, i) => {
+    const x = dayCounts.length > 1 ? (i / (dayCounts.length - 1)) * CHART_W : 0;
+    const y = CHART_H - (count / maxDayCount) * (CHART_H - 20) - 10;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const chartAreaPath = `M 0,${CHART_H} L ${chartPoints.join(" L ")} L ${CHART_W},${CHART_H} Z`;
+  const chartLinePath = `M ${chartPoints.join(" L ")}`;
+  const totalWeekCount = dayCounts.reduce((a, b) => a + b, 0);
+
+  // Real asset breakdown for the donut — top asset by real settled volume
+  // vs. everything else. No fabricated confidential/public split, since that
+  // primitive (Pedersen-shielded transfers) isn't deployed in this build.
+  const topAsset = assetCodes[0];
+  const topAssetPct = totalSettledVolume > 0 && topAsset ? Math.round((assetTotals[topAsset] / totalSettledVolume) * 100) : 0;
+  const otherAssetsPct = topAsset ? 100 - topAssetPct : 0;
+  const otherAssetsVolume = totalSettledVolume - (topAsset ? assetTotals[topAsset] : 0);
+
   const getLocalizedTabHeader = (id: string) => {
     switch (id) {
       case "overview": return t("nav_overview");
@@ -1260,10 +1352,10 @@ export default function Dashboard() {
             {/* KPI Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {[
-                { title: t("kpi_active_agents"), value: "3", desc: t("kpi_active_agents_desc"), icon: Bot, color: "text-blue-400", border: "hover:border-blue-500/20" },
-                { title: t("kpi_protected_volume"), value: "$134,800", desc: t("kpi_protected_volume_desc"), icon: Coins, color: "text-purple-400", border: "hover:border-purple-500/20" },
-                { title: t("kpi_compliance_ratio"), value: "100%", desc: t("kpi_compliance_ratio_desc"), icon: Scale, color: "text-emerald-400", border: "hover:border-emerald-500/20" },
-                { title: t("kpi_zk_verified"), value: "32", desc: t("kpi_zk_verified_desc"), icon: Shield, color: "text-indigo-400", border: "hover:border-indigo-500/20" },
+                { title: t("kpi_active_agents"), value: String(kpiActiveDistributions), desc: t("kpi_active_agents_desc"), icon: Bot, color: "text-blue-400", border: "hover:border-blue-500/20" },
+                { title: t("kpi_protected_volume"), value: kpiSettledVolumeLabel, desc: t("kpi_protected_volume_desc"), icon: Coins, color: "text-purple-400", border: "hover:border-purple-500/20" },
+                { title: t("kpi_compliance_ratio"), value: `${kpiComplianceRatio}%`, desc: t("kpi_compliance_ratio_desc"), icon: Scale, color: "text-emerald-400", border: "hover:border-emerald-500/20" },
+                { title: t("kpi_zk_verified"), value: String(kpiZkVerifiedClaims), desc: t("kpi_zk_verified_desc"), icon: Shield, color: "text-indigo-400", border: "hover:border-indigo-500/20" },
               ].map((kpi, idx) => {
                 const Icon = kpi.icon;
                 return (
@@ -1291,50 +1383,34 @@ export default function Dashboard() {
                     <p className="text-xs text-slate-500">{t("chart_volume_subtitle")}</p>
                   </div>
                   <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5 font-mono">
-                    <TrendingUp className="w-3.5 h-3.5" /> {t("chart_volume_grow")}
+                    <TrendingUp className="w-3.5 h-3.5" /> {totalWeekCount} {lang === "es" ? "liquidadas (7d)" : "settled (7d)"}
                   </span>
                 </div>
 
-                {/* SVG Area Chart */}
+                {/* Real 7-day settled-transaction-count polyline (no fabricated curve) */}
                 <div className="h-64 relative flex items-end">
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 600 240">
+                  <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${CHART_W} ${CHART_H}`}>
                     <defs>
                       <linearGradient id="glowGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
                         <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
                       </linearGradient>
                     </defs>
-                    <line x1="0" y1="60" x2="600" y2="60" stroke="#1e293b" strokeOpacity="0.4" strokeDasharray="4 4" />
-                    <line x1="0" y1="120" x2="600" y2="120" stroke="#1e293b" strokeOpacity="0.4" strokeDasharray="4 4" />
-                    <line x1="0" y1="180" x2="600" y2="180" stroke="#1e293b" strokeOpacity="0.4" strokeDasharray="4 4" />
-                    <path
-                      d="M 0 190 Q 100 120 200 150 T 400 60 T 600 20 L 600 220 L 0 220 Z"
-                      fill="url(#glowGrad)"
-                    />
-                    <path
-                      d="M 0 190 Q 100 120 200 150 T 400 60 T 600 20"
-                      fill="none"
-                      stroke="#6366f1"
-                      strokeWidth="3.5"
-                    />
-                    <path
-                      d="M 0 200 Q 120 180 240 190 T 480 150 T 600 110"
-                      fill="none"
-                      stroke="#94a3b8"
-                      strokeWidth="2"
-                      strokeOpacity="0.3"
-                      strokeDasharray="5 5"
-                    />
+                    <line x1="0" y1={CHART_H * 0.25} x2={CHART_W} y2={CHART_H * 0.25} stroke="#1e293b" strokeOpacity="0.4" strokeDasharray="4 4" />
+                    <line x1="0" y1={CHART_H * 0.5} x2={CHART_W} y2={CHART_H * 0.5} stroke="#1e293b" strokeOpacity="0.4" strokeDasharray="4 4" />
+                    <line x1="0" y1={CHART_H * 0.75} x2={CHART_W} y2={CHART_H * 0.75} stroke="#1e293b" strokeOpacity="0.4" strokeDasharray="4 4" />
+                    <path d={chartAreaPath} fill="url(#glowGrad)" />
+                    <path d={chartLinePath} fill="none" stroke="#6366f1" strokeWidth="3.5" />
+                    {dayCounts.map((count, i) => {
+                      const [x, y] = chartPoints[i].split(",").map(Number);
+                      return <circle key={i} cx={x} cy={y} r="4" fill="#6366f1" />;
+                    })}
                   </svg>
                 </div>
                 <div className="flex justify-between items-center text-xs text-slate-500 font-mono mt-4 border-t border-slate-900/60 pt-4">
-                  <span>{t("mon")}</span>
-                  <span>{t("tue")}</span>
-                  <span>{t("wed")}</span>
-                  <span>{t("thu")}</span>
-                  <span>{t("fri")}</span>
-                  <span>{t("sat")}</span>
-                  <span>{t("sun")}</span>
+                  {dayLabels.map((label, i) => (
+                    <span key={i}>{label}</span>
+                  ))}
                 </div>
               </div>
 
@@ -1345,38 +1421,48 @@ export default function Dashboard() {
                   <p className="text-xs text-slate-500">{t("chart_privacy_subtitle")}</p>
                 </div>
 
-                <div className="flex justify-center my-6">
-                  <svg className="w-36 h-36" viewBox="0 0 36 36">
-                    <circle cx="18" cy="18" r="15.91" fill="none" stroke="#1e293b" strokeWidth="3" />
-                    <circle
-                      cx="18"
-                      cy="18"
-                      r="15.91"
-                      fill="none"
-                      stroke="#8b5cf6"
-                      strokeWidth="3"
-                      strokeDasharray="72 28"
-                      strokeDashoffset="25"
-                    />
-                  </svg>
-                </div>
+                {totalSettledVolume > 0 && topAsset ? (
+                  <>
+                    <div className="flex justify-center my-6">
+                      <svg className="w-36 h-36" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="15.91" fill="none" stroke="#1e293b" strokeWidth="3" />
+                        <circle
+                          cx="18"
+                          cy="18"
+                          r="15.91"
+                          fill="none"
+                          stroke="#8b5cf6"
+                          strokeWidth="3"
+                          strokeDasharray={`${topAssetPct} ${otherAssetsPct}`}
+                          strokeDashoffset="25"
+                        />
+                      </svg>
+                    </div>
 
-                <div className="space-y-2.5 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="flex items-center gap-2 text-slate-400 font-semibold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-purple-550"></span>
-                      {t("mode_wrapper")} (72%)
-                    </span>
-                    <span className="font-mono text-slate-200 font-bold">$97,056</span>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="flex items-center gap-2 text-slate-400 font-semibold">
+                          <span className="w-2.5 h-2.5 rounded-full bg-purple-550"></span>
+                          {topAsset} ({topAssetPct}%)
+                        </span>
+                        <span className="font-mono text-slate-200 font-bold">{assetTotals[topAsset].toLocaleString()}</span>
+                      </div>
+                      {otherAssetsPct > 0 && (
+                        <div className="flex justify-between items-center">
+                          <span className="flex items-center gap-2 text-slate-400 font-semibold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+                            {t("chart_other_assets")} ({otherAssetsPct}%)
+                          </span>
+                          <span className="font-mono text-slate-200 font-bold">{otherAssetsVolume.toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center py-10">
+                    <p className="text-xs text-slate-500 text-center">{t("chart_no_volume_yet")}</p>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="flex items-center gap-2 text-slate-400 font-semibold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
-                      {t("mode_standard")} (28%)
-                    </span>
-                    <span className="font-mono text-slate-200 font-bold">$37,744</span>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 

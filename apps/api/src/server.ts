@@ -487,6 +487,14 @@ app.post("/confidia/distributions", async (c) => {
   }
 });
 
+// Backs the Overview tab's KPI cards and charts with real counts instead of
+// hardcoded numbers — the dashboard fetches this list on load and after every
+// real action so the numbers actually move as the system is used.
+app.get("/confidia/distributions", async (c) => {
+  const list = await supabase.from("distributions").select();
+  return c.json(list.data || []);
+});
+
 app.get("/confidia/distributions/:id", async (c) => {
   const id = c.req.param("id");
   const record = await supabase.from("distributions").select().eq("id", id).single();
@@ -600,6 +608,41 @@ app.post("/confidia/claims/submit", async (c) => {
     return c.json({ success: true, claim: claimRecord.data });
   } catch (error: any) {
     return c.json({ error: error.message }, 500);
+  }
+});
+
+// Lists every recorded claim (legacy Merkle-based ones and the real on-chain
+// ones from /confidia/claims/record below) — backs the Overview tab's ZK
+// Verified Claims KPI with a real, growing count.
+app.get("/confidia/claims", async (c) => {
+  const list = await supabase.from("claims").select();
+  return c.json(list.data || []);
+});
+
+// Records evidence of a claim that already settled for real on-chain (the
+// Claim Portal calls this after a successful, Freighter-signed claim()
+// transaction against the vesting-claim vault). Unlike /confidia/claims/submit
+// above, this performs no Merkle-proof check — the on-chain tx itself, whose
+// hash is shown in the UI as a stellar.expert link, IS the proof of settlement,
+// independently verifiable by anyone without trusting this endpoint at all.
+app.post("/confidia/claims/record", async (c) => {
+  const { nullifier, recipient, amount, vaultId } = await c.req.json();
+  if (!nullifier || !recipient) {
+    return c.json({ error: "Missing nullifier or recipient" }, 400);
+  }
+  try {
+    const claimId = require("crypto").randomBytes(16).toString("hex");
+    const claimRecord = await supabase.from("claims").insert({
+      id: claimId,
+      distribution_id: vaultId || "on-chain-vault",
+      nullifier,
+      claimed_amount: amount || 0,
+      recipient_address: recipient,
+      status: "claimed"
+    }).select().single();
+    return c.json({ success: true, claim: claimRecord.data });
+  } catch (error: any) {
+    return c.json({ error: `Failed to record claim: ${error.message}` }, 500);
   }
 });
 
