@@ -31,5 +31,16 @@
     "positive": "verify_proof(public_inputs, proof) -> () (Ok)  — real proof accepted on-chain",
     "negative": "verify_proof(public_inputs, tampered_proof) -> Error(Contract, #4) VerificationFailed  — forgery rejected"
   },
+  "endToEnd": {
+    "note": "vesting-claim VAULT calls the REAL verifier by address — full flow proven on testnet.",
+    "vault": "CC2YABHGSO2MSTKGIFKA37PE64QGMPDEIQU3RP4PPW2XKUXS3XRKVY6P",
+    "vaultWiring": { "verifier": "CAM2WWTB…IW6J (real)", "jwkRegistry": "CCE7XJSY…KABR", "fundingToken": "native XLM SAC CDLZFC3S…GCYSC" },
+    "flow": "deposit (fund vault) -> claim(real proof) -> vault calls jwk.is_key_trusted + real verifier.verify_proof -> SEP-41 transfer to recipient",
+    "evidence": {
+      "positive": "claim(real proof) -> true; vault native balance 500000000 -> 400000000 (10 XLM settled to recipient)",
+      "negative": "claim(tampered proof, new nullifier) -> reverts: sub-call verify_proof returns Error(Contract,#4) VerificationFailed; vault balance unchanged (400000000) — NO settlement on a forged proof",
+      "replay": "claim(reused nullifier) -> reverts (Double claim detected)"
+    }
+  },
   "reproduce": "see contracts/real-verifier/README.md"
 }

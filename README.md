@@ -219,9 +219,16 @@ are pinned to `soroban-sdk = "=20.0.0"`.
 > [`contracts/real-verifier/`](./contracts/real-verifier/); details:
 > [Technical Paper §9](./TECHNICAL_PAPER.md).
 >
+> **End-to-end proven:** a `vesting-claim` vault
+> ([`CC2YABHG…VY6P`](https://stellar.expert/explorer/testnet/contract/CC2YABHGSO2MSTKGIFKA37PE64QGMPDEIQU3RP4PPW2XKUXS3XRKVY6P))
+> pointed at the real verifier was funded and exercised on-chain: a **valid** proof
+> settled 10 XLM via SEP-41 (vault `500000000 → 400000000`); a **tampered** proof made
+> the vault's `verify_proof` sub-call fail (`#4`) and reverted the claim with **no
+> settlement**; a replayed nullifier reverted (`Double claim`). Settlement is genuinely
+> gated on a real proof verifying in the real verifier.
+>
 > `contracts/ultrahonk-verifier` (soroban-sdk 20) remains as a labeled fast-path
-> **simulation** for end-to-end testing of the surrounding protocol; `vesting-claim`
-> is wired to call the **real** verifier by address.
+> **simulation** for protocol testing.
 
 ### Deployed on Stellar Testnet
 

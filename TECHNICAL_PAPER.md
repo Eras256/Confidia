@@ -346,10 +346,23 @@ OpenZeppelin's `ConfidentialVerifier` uses. Status as of this writing:
   `Error(Contract, #4) = VerificationFailed`. Valid proof accepted, forged proof rejected —
   by BN254 pairing, not a marker check. Artifacts and a reproducer are committed under
   `contracts/real-verifier/`.
-- ✅ **`vesting-claim` is wired to the real verifier by address** via a `#[contractclient]`
-  trait matching `verify_proof(public_inputs, proof_bytes)`. The SDK-20 vault and the
-  SDK-26 verifier interoperate purely through the contract address; an invalid proof
-  reverts the claim.
+- ✅ **The full vault flow is proven on-chain, end-to-end** — not just wired in code. A
+  `vesting-claim` vault (`CC2YABHG…VY6P`), initialized with `verifier =` the real
+  verifier, `jwk_registry`, and a native-XLM SAC as funding token, was funded with 50
+  XLM and exercised:
+  - **Deposit → valid claim → settlement.** `claim(real proof, …)` returned `true`; the
+    vault called `jwk.is_key_trusted` then the **real** `verify_proof` (cross-contract
+    to the SDK-26 verifier), which passed, and the SEP-41 transfer executed — the vault's
+    native balance dropped `500000000 → 400000000` (10 XLM settled to the recipient).
+  - **Forged claim → revert, no settlement.** A one-byte-tampered proof made the vault's
+    `verify_proof` sub-call return `Error(Contract, #4) VerificationFailed`, which
+    propagated and reverted the whole claim; the vault balance was **unchanged**. A forged
+    proof releases no funds.
+  - **Replay → revert.** Reusing a spent nullifier reverts with `Double claim detected`.
+
+  This closes the loop: settlement is gated on a real UltraHonk proof verifying in the
+  real verifier, over a real SEP-41 transfer. The SDK-20 vault and SDK-26 verifier
+  interoperate purely by contract address.
 
 **This is no longer an architectural promise: a real UltraHonk proof verifies on Stellar
 Testnet today, and a forged one is rejected.** The remaining production work is swapping
