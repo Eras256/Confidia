@@ -50,7 +50,16 @@ export class LcpClient {
     if (!response.ok) {
       throw new Error(`Failed to fetch LCP document: ${response.statusText}`);
     }
-    return await response.json() as LcpDocument;
+    const text = await response.text();
+    try {
+      return JSON.parse(text) as LcpDocument;
+    } catch {
+      // A 2xx response that isn't JSON usually means the domain has no real
+      // LCP document at this path (e.g. a SPA/catch-all route serving its
+      // index.html for any unknown path) — surface that plainly instead of
+      // leaking a raw "Unexpected token '<'" parse error.
+      throw new Error(`Domain does not publish a valid legal-context.json document at ${url}`);
+    }
   }
 
   /**
