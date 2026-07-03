@@ -38,7 +38,7 @@ import {
 import { Language, translations } from "./translations";
 import { connectWallet, getStoredAddress, disconnectWallet } from "../lib/wallet-kit";
 import { authenticateWithWallet } from "../lib/auth";
-import { readContract, writeContract, sendPayment, fetchAccountBalances, type WalletBalance } from "../lib/soroban-tx";
+import { readContract, writeContract, sendPayment, fetchAccountBalances, contractExplorerUrl, type WalletBalance } from "../lib/soroban-tx";
 import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -52,6 +52,7 @@ const SETTINGS_STORAGE_KEY = "confidia_settings_v1";
 const ENV_CONTRACTS = {
   jwkRegistry: process.env.NEXT_PUBLIC_JWK_REGISTRY_CONTRACT_ID || null,
   ultrahonkVerifier: process.env.NEXT_PUBLIC_VERIFIER_CONTRACT_ID || null,
+  ultrahonkVerifierReal: process.env.NEXT_PUBLIC_VERIFIER_REAL_CONTRACT_ID || null,
   compliance: process.env.NEXT_PUBLIC_COMPLIANCE_CONTRACT_ID || null,
   vestingClaim: process.env.NEXT_PUBLIC_VESTING_CLAIM_CONTRACT_ID || null,
   gateway: process.env.NEXT_PUBLIC_GATEWAY_CONTRACT_ID || null,
@@ -95,13 +96,21 @@ export default function Dashboard() {
   const [distDeployError, setDistDeployError] = useState<string>("");
   const [claimChartData, setClaimChartData] = useState({ claimed: 0, pending: 22500 });
 
-  // Recipient Claim States
-  const [claimEmail, setClaimEmail] = useState<string>("contributor2@example.com");
-  const [claimPin, setClaimPin] = useState<string>("90210");
-  const [claimWallet, setClaimWallet] = useState<string>("GCB5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2P");
-  const [claimProving, setClaimProving] = useState<boolean>(false);
-  const [claimLogs, setClaimLogs] = useState<string[]>([]);
-  const [claimSuccessMsg, setClaimSuccessMsg] = useState<string>("");
+  // Claim Portal state — a genuine on-chain claim() call against the
+  // vesting-claim vault, using a real committed UltraHonk proof
+  // (contracts/real-verifier/artifacts/simple_circuit, served from
+  // /proofs/simple_circuit/) verified by the real Nethermind verifier. Four
+  // scenarios exercise real, deterministic contract behavior confirmed via
+  // direct CLI testing: three of them (untrusted key, tampered proof, replay)
+  // are rejected by Soroban's mandatory pre-flight simulation before any
+  // signature is ever requested — so there is no tx hash for those, by
+  // design, not by omission.
+  const [claimScenario, setClaimScenario] = useState<"happy" | "untrusted_kid" | "tampered_proof" | "replay">("happy");
+  const [claimBusy, setClaimBusy] = useState<boolean>(false);
+  const [claimResult, setClaimResult] = useState<{ ok: boolean; scenario: string; hash?: string; url?: string; message: string; raw?: string } | null>(null);
+  const [claimError, setClaimError] = useState<string>("");
+  const [lastClaimNullifier, setLastClaimNullifier] = useState<string>("");
+  const [claimRawOpen, setClaimRawOpen] = useState<boolean>(false);
 
   // Freighter Wallet Mock State
   const [freighterConnected, setFreighterConnected] = useState<boolean>(false);
@@ -109,10 +118,7 @@ export default function Dashboard() {
   const [freighterNetwork, setFreighterNetwork] = useState<"testnet" | "public">("testnet");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [jwtToken, setJwtToken] = useState<string>("");
-  const [demoFailureScenario, setDemoFailureScenario] = useState<"happy" | "stale_jwk" | "wrong_wallet" | "paused" | "claimed">("happy");
-  const [techDrawerOpen, setTechDrawerOpen] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false); // mobile nav drawer
-  const [claimCountdown, setClaimCountdown] = useState<number>(300); // 5 minutes countdown
   const [contractRegistry, setContractRegistry] = useState<any>(ENV_REGISTRY);
   // Real, honest indicator of the API's actual backing store (fetched from
   // /status) — not a client-side dropdown that implies switching does anything.
@@ -163,6 +169,11 @@ export default function Dashboard() {
   const [keyRegistering, setKeyRegistering] = useState<boolean>(false);
   const [keyTx, setKeyTx] = useState<{ hash: string; url: string } | null>(null);
   const [keyTxError, setKeyTxError] = useState<string>("");
+  // Separate from keyTx/keyTxError so the evidence link renders right next to
+  // the table row the user actually clicked, not only in the panel above.
+  const [revokingKid, setRevokingKid] = useState<string>("");
+  const [revokeTx, setRevokeTx] = useState<{ kid: string; hash: string; url: string } | null>(null);
+  const [revokeError, setRevokeError] = useState<string>("");
   const [signedVerifying, setSignedVerifying] = useState<boolean>(false);
   const [signedVerifyTx, setSignedVerifyTx] = useState<{ hash: string; url: string } | null>(null);
   // Real wallet balances (read from Horizon — no hardcoded asset/issuer addresses)
@@ -170,27 +181,13 @@ export default function Dashboard() {
   const [balancesLoading, setBalancesLoading] = useState<boolean>(false);
   const [selectedDepositIdx, setSelectedDepositIdx] = useState<number>(0);
   const [depositAmount, setDepositAmount] = useState<string>("10");
+  const [depositStatus, setDepositStatus] = useState<string>("");
   const [depositing, setDepositing] = useState<boolean>(false);
   const [depositTx, setDepositTx] = useState<{ hash: string; url: string } | null>(null);
   const [depositError, setDepositError] = useState<string>("");
   const [liveVerifying, setLiveVerifying] = useState<boolean>(false);
   const [liveResults, setLiveResults] = useState<Array<{ method: string; contract: string; result: string; ok: boolean; latencyMs: number }>>([]);
   const [liveError, setLiveError] = useState<string>("");
-
-  // Countdown effect
-  useEffect(() => {
-    if (claimCountdown <= 0) return;
-    const interval = setInterval(() => {
-      setClaimCountdown(prev => prev - 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [claimCountdown]);
-
-  const formatCountdown = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-  };
 
   useEffect(() => {
     const loadBackendData = async () => {
@@ -310,9 +307,7 @@ export default function Dashboard() {
         const result = await connectWallet();
         setFreighterConnected(true);
 
-        const address = demoFailureScenario === "wrong_wallet"
-          ? "GCSB5XWRONGWALLET498234902348902348902348"
-          : result.address;
+        const address = result.address;
         setFreighterAddress(address);
 
         // Trigger SEP-10 Authentication challenge
@@ -411,8 +406,10 @@ export default function Dashboard() {
         ...prev.filter((k) => k.kid !== kid),
       ]);
     } catch (err: any) {
-      setKeyTxError(err?.message || String(err));
-      if (err?.explorerUrl) setKeyTx({ hash: err.hash, url: err.explorerUrl });
+      // Note: a failed transaction still has a real hash (it was submitted and
+      // rejected on-chain) — include it as text, but don't show it in the
+      // "success" box, which would misleadingly imply the action succeeded.
+      setKeyTxError(err?.explorerUrl ? `${err.message || err} (tx: ${err.hash})` : (err?.message || String(err)));
     } finally {
       setKeyRegistering(false);
     }
@@ -438,8 +435,7 @@ export default function Dashboard() {
       const res = await writeContract(verifierId, "verify_proof", [proofScVal, emptyVec], freighterAddress);
       setSignedVerifyTx({ hash: res.hash, url: res.explorerUrl });
     } catch (err: any) {
-      setLiveError(err?.message || String(err));
-      if (err?.explorerUrl) setSignedVerifyTx({ hash: err.hash, url: err.explorerUrl });
+      setLiveError(err?.explorerUrl ? `${err.message || err} (tx: ${err.hash})` : (err?.message || String(err)));
     } finally {
       setSignedVerifying(false);
     }
@@ -513,7 +509,11 @@ export default function Dashboard() {
       return;
     }
     const vaultId = contractRegistry?.contracts?.vestingClaim;
-    const verifierId = contractRegistry?.contracts?.ultrahonkVerifier;
+    // The vault must be bound to the REAL UltraHonk verifier (not the
+    // simulated one used by the Security tab's demo), since a real claim()
+    // call performs genuine pairing verification against whatever verifier
+    // address is stored here.
+    const verifierId = contractRegistry?.contracts?.ultrahonkVerifierReal;
     const jwkId = contractRegistry?.contracts?.jwkRegistry;
     if (!vaultId || !verifierId || !jwkId) {
       setDistDeployError(lang === "es" ? "Registro de contratos no disponible." : "Contract registry unavailable.");
@@ -543,93 +543,125 @@ export default function Dashboard() {
       await fetch(`${API_BASE}/confidia/distributions/${distId}/activate`, { method: "POST" }).catch(() => {});
       setClaimChartData({ claimed: 0, pending: distTotalAllocation });
     } catch (err: any) {
-      setDistDeployError(err?.message || String(err));
-      if (err?.explorerUrl) setDistDeployTx({ hash: err.hash, url: err.explorerUrl });
+      setDistDeployError(err?.explorerUrl ? `${err.message || err} (tx: ${err.hash})` : (err?.message || String(err)));
       console.error(err);
     } finally {
       setDistDeploying(false);
     }
   };
 
-  // Recipient Payout Claim Handler
-  const handleExecuteClaim = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (claimProving) return;
-    setClaimProving(true);
-    setClaimLogs([]);
-    setClaimSuccessMsg("");
+  // Kid genuinely registered on-chain in the JWK registry this session via the
+  // real Identity Ops "Register on-chain" flow — the only kid claim() will
+  // actually accept. A key present in Supabase's synced list is NOT the same
+  // as one is_key_trusted() would approve; see UNTRUSTED_CLAIM_KID below.
+  const TRUSTED_CLAIM_KID = "google-oauth-2026";
+  // Deliberately never registered on-chain — is_key_trusted() genuinely
+  // returns false for this, demonstrating a real rejection, not a fake one.
+  const UNTRUSTED_CLAIM_KID = "untrusted-demo-key";
+  // Kept small (1 XLM, 7 decimals) so the shared demo vault survives many
+  // real happy-path runs without needing to be re-funded constantly.
+  const CLAIM_AMOUNT_STROOPS = 10_000_000;
 
-    const claimSteps = [
-      { text: `[MERKLE] ${t("claim_log_merkle")}`, delay: 0 },
-      { text: `[OIDC] ${t("claim_log_jwt")}`, delay: 800 },
-      { text: `[PROVER] ${t("claim_log_zk")}`, delay: 1850 },
-    ];
+  const randomNullifierHex = () =>
+    Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
 
-    claimSteps.forEach((step) => {
-      setTimeout(() => {
-        setClaimLogs((prev) => [...prev, step.text]);
-      }, step.delay);
-    });
+  // Real, Freighter-signed claim() call against the funded vesting-claim
+  // vault, using the real committed UltraHonk proof artifacts. Four scenarios
+  // exercise genuinely different on-chain code paths (confirmed via direct
+  // CLI testing this session) — nothing here is scripted or client-side only.
+  const handleExecuteClaim = async () => {
+    if (claimBusy) return;
+    if (!freighterConnected || !freighterAddress) {
+      setClaimError(lang === "es" ? "Conecta Freighter para firmar el claim." : "Connect Freighter to sign the claim.");
+      return;
+    }
+    const vaultId = contractRegistry?.contracts?.vestingClaim;
+    if (!vaultId) {
+      setClaimError(lang === "es" ? "Vault de vesting no disponible." : "Vesting vault unavailable.");
+      return;
+    }
+    if (claimScenario === "replay" && !lastClaimNullifier) {
+      setClaimError(lang === "es"
+        ? "Ejecuta primero 'Happy Path' para crear un nullifier ya gastado que reutilizar."
+        : "Run 'Happy Path' first to create a spent nullifier to replay.");
+      return;
+    }
 
-    setTimeout(async () => {
-      if (demoFailureScenario === "stale_jwk") {
-        setClaimLogs((prev) => [...prev, `[ERROR] ${t("alert_sync_blocked")}`]);
-        setClaimProving(false);
-        return;
-      } else if (demoFailureScenario === "paused") {
-        setClaimLogs((prev) => [...prev, `[ERROR] ${t("alert_paused_blocked")}`]);
-        setClaimProving(false);
-        return;
-      } else if (demoFailureScenario === "claimed") {
-        setClaimLogs((prev) => [...prev, `[ERROR] ${t("alert_already_spent")}`]);
-        setClaimProving(false);
-        return;
-      } else if (demoFailureScenario === "wrong_wallet" || (freighterConnected && freighterAddress !== "GCB5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2P")) {
-        setClaimLogs((prev) => [...prev, `[PROVER] ZK proof generated for GCB5X7...`]);
-        setClaimLogs((prev) => [...prev, `[ERROR] ${t("wallet_mismatch_warning")} GCB5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2P vs active Freighter address ${freighterAddress || "Not Connected"}`]);
-        setClaimProving(false);
-        return;
+    setClaimBusy(true);
+    setClaimError("");
+    setClaimResult(null);
+    try {
+      const [proofBuf, inputsBuf] = await Promise.all([
+        fetch("/proofs/simple_circuit/proof").then((r) => r.arrayBuffer()),
+        fetch("/proofs/simple_circuit/public_inputs").then((r) => r.arrayBuffer()),
+      ]);
+      let proofBytes = new Uint8Array(proofBuf);
+      const publicInputsBytes = new Uint8Array(inputsBuf);
+
+      let kid = TRUSTED_CLAIM_KID;
+      let nullifierHex = randomNullifierHex();
+
+      if (claimScenario === "untrusted_kid") {
+        kid = UNTRUSTED_CLAIM_KID;
+      } else if (claimScenario === "tampered_proof") {
+        proofBytes = proofBytes.slice();
+        proofBytes[10] ^= 0xff; // flips one real proof byte — invalidates the pairing check
+      } else if (claimScenario === "replay") {
+        nullifierHex = lastClaimNullifier; // reusing an already-spent nullifier on purpose
       }
 
-      setClaimLogs((prev) => [...prev, `[SOROBAN] ${t("claim_log_submit")}`]);
+      const nullifierBytes = Uint8Array.from(nullifierHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
 
-      try {
-        const amount = claimEmail === "contributor1@example.com" ? 5000 : claimEmail === "contributor3@example.com" ? 10000 : 7500;
-        const nullifier = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+      const args = [
+        nativeToScVal(proofBytes, { type: "bytes" }),
+        nativeToScVal(publicInputsBytes, { type: "bytes" }),
+        nativeToScVal(freighterAddress, { type: "address" }),
+        nativeToScVal(nullifierBytes, { type: "bytes" }),
+        nativeToScVal(kid, { type: "string" }),
+        nativeToScVal(CLAIM_AMOUNT_STROOPS, { type: "i128" }),
+      ];
 
-        const res = await fetch(`${API_BASE}/confidia/claims/submit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            proof: ["0x0000000000000000000000000000000000000000000000000000000000000000"],
-            publicInputs: ["0x0000000000000000000000000000000000000000000000000000000000000000"],
-            recipient: claimWallet,
-            nullifier,
-            kid: "mock-google-key-id",
-            distributionId: distId || "default-dist",
-            recipientDetail: {
-              email: claimEmail,
-              amount,
-              pin: claimPin
-            }
-          })
+      const res = await writeContract(vaultId, "claim", args, freighterAddress);
+
+      // The chain accepted the call. For "happy" this is the expected,
+      // desired outcome. For the other three scenarios, an acceptance would
+      // be a genuine anomaly worth flagging plainly rather than celebrating.
+      setClaimResult({
+        ok: true,
+        scenario: claimScenario,
+        hash: res.hash,
+        url: res.explorerUrl,
+        message: claimScenario === "happy"
+          ? t("claim_success")
+          : (lang === "es"
+            ? "Inesperado: esta llamada debería haber sido rechazada on-chain."
+            : "Unexpected: this call should have been rejected on-chain."),
+      });
+      if (claimScenario === "happy") {
+        setLastClaimNullifier(nullifierHex);
+      }
+    } catch (err: any) {
+      if (claimScenario === "happy") {
+        // A genuine, unexpected failure of the happy path.
+        setClaimError(err?.explorerUrl ? `${err.message || err} (tx: ${err.hash})` : (err?.message || String(err)));
+      } else {
+        // The expected outcome: Soroban rejected this before (simulation) or
+        // after (submitted) signing. Either way, show the real diagnostic.
+        setClaimResult({
+          ok: false,
+          scenario: claimScenario,
+          hash: err?.hash,
+          url: err?.explorerUrl,
+          message: err?.message || String(err),
+          raw: err?.message ? String(err.message) : String(err),
         });
-
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-
-        setClaimSuccessMsg(t("claim_success"));
-        setClaimChartData(prev => ({
-          claimed: prev.claimed + amount,
-          pending: Math.max(0, prev.pending - amount)
-        }));
-      } catch (err: any) {
-        console.error(err);
-        setClaimLogs((prev) => [...prev, `[ERROR] claim failed: ${err.message || err}`]);
-      } finally {
-        setClaimProving(false);
       }
-    }, 3000);
+      console.error(err);
+    } finally {
+      setClaimBusy(false);
+    }
   };
 
   // OIDC Key Synchronization Handlers
@@ -673,21 +705,24 @@ export default function Dashboard() {
   const handleRevokeJwtKey = async (kid: string) => {
     const jwkId = contractRegistry?.contracts?.jwkRegistry;
     if (!freighterConnected || !freighterAddress) {
-      setKeyTxError(lang === "es" ? "Conecta Freighter para firmar la revocación." : "Connect Freighter to sign the revocation.");
+      setRevokeError(lang === "es" ? "Conecta Freighter para firmar la revocación." : "Connect Freighter to sign the revocation.");
       return;
     }
     if (!jwkId) return;
-    setKeyTxError("");
+    setRevokingKid(kid);
+    setRevokeError("");
+    setRevokeTx(null);
     try {
       const res = await writeContract(jwkId, "revoke_key", [nativeToScVal(kid, { type: "string" })], freighterAddress);
-      setKeyTx({ hash: res.hash, url: res.explorerUrl });
+      setRevokeTx({ kid, hash: res.hash, url: res.explorerUrl });
       // Reflect it in the off-chain identity-ops list too (best effort).
       await fetch(`${API_BASE}/confidia/identity/keys/${kid}/revoke`, { method: "POST" }).catch(() => {});
       setJwtKeys(prev => prev.map(k => k.kid === kid ? { ...k, status: "revoked" } : k));
     } catch (err: any) {
-      setKeyTxError(err?.message || String(err));
-      if (err?.explorerUrl) setKeyTx({ hash: err.hash, url: err.explorerUrl });
+      setRevokeError(err?.explorerUrl ? `${err.message || err} (tx: ${err.hash})` : (err?.message || String(err)));
       console.error("Failed to revoke key on-chain", err);
+    } finally {
+      setRevokingKid("");
     }
   };
 
@@ -927,8 +962,7 @@ export default function Dashboard() {
       setStatusMessage(`${t("status_payment_submitted")} ${res.hash.substring(0, 8)}…`);
       setTimeout(() => setStatusMessage(""), 4000);
     } catch (err: any) {
-      log(`[ERROR] ${err?.message || err}`, "warn");
-      if (err?.explorerUrl) setLastPaymentTx({ hash: err.hash, url: err.explorerUrl });
+      log(`[ERROR] ${err?.message || err}${err?.explorerUrl ? ` (tx: ${err.hash})` : ""}`, "warn");
       setStatusMessage(`Payment failed: ${err?.message || err}`);
       setTimeout(() => setStatusMessage(""), 4000);
     } finally {
@@ -971,6 +1005,25 @@ export default function Dashboard() {
       const { Asset } = await import("@stellar/stellar-sdk");
       const asset = selected.code === "XLM" ? Asset.native() : new Asset(selected.code, selected.issuer!);
       const recipient = contractRegistry?.deployer || "GDS5FCW6N7AW4BRJQS22AYUKYSAMNSHMUUTW6ZKRTYMWMIIJUSN7XAHR";
+
+      // Real-world classic payments fail on-chain (paymentNoTrust) if the
+      // recipient never opened a trustline for this specific asset+issuer.
+      // Proactively establish it server-side (treasury's own signature, a
+      // changeTrust-only endpoint) before attempting the payment — this is
+      // what eliminates that friction for whatever asset the wallet holds.
+      if (selected.code !== "XLM" && selected.issuer) {
+        setDepositStatus(lang === "es" ? `Preparando trustline para ${selected.code}…` : `Preparing trustline for ${selected.code}…`);
+        const trustRes = await fetch(`${API_BASE}/confidia/treasury/ensure-trustline`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assetCode: selected.code, issuer: selected.issuer }),
+        }).then((r) => r.json());
+        if (trustRes?.error) {
+          throw new Error(`Could not establish trustline: ${trustRes.error}`);
+        }
+      }
+      setDepositStatus("");
+
       const res = await sendPayment(freighterAddress, recipient, String(amt), asset);
       setDepositTx({ hash: res.hash, url: res.explorerUrl });
       refreshWalletBalances(freighterAddress);
@@ -992,15 +1045,19 @@ export default function Dashboard() {
           ]);
           if (Array.isArray(agreementsRes)) setAgreements(agreementsRes);
           if (Array.isArray(txRes)) setTransactions(txRes);
+        } else {
+          console.error("Agreement recording did not succeed:", agrRes);
         }
-      } catch {
-        /* best-effort — the on-chain deposit already succeeded regardless */
+      } catch (agrErr) {
+        // Best-effort: the on-chain deposit already succeeded regardless, but
+        // log why the Agreements/Audit Trail entry didn't get created.
+        console.error("Failed to record agreement for this deposit:", agrErr);
       }
     } catch (err: any) {
-      setDepositError(err?.message || String(err));
-      if (err?.explorerUrl) setDepositTx({ hash: err.hash, url: err.explorerUrl });
+      setDepositError(err?.explorerUrl ? `${err.message || err} (tx: ${err.hash})` : (err?.message || String(err)));
     } finally {
       setDepositing(false);
+      setDepositStatus("");
     }
   };
 
@@ -1660,7 +1717,7 @@ export default function Dashboard() {
                     className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-xl transition duration-300 shadow-md"
                   >
                     {depositing ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />}
-                    {depositing ? t("processing") : t("wrap_tokens_button")}
+                    {depositing ? (depositStatus || t("processing")) : t("wrap_tokens_button")}
                   </button>
                   {depositTx && (
                     <a href={depositTx.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3 hover:bg-emerald-500/15">
@@ -2199,47 +2256,39 @@ export default function Dashboard() {
         {/* Tab 10: Recipient Claim Portal */}
         {activeTab === "claim" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Demo Simulation Controls Selector */}
+            {/* Real scenario selector — each button changes which real code path
+                claim() takes on-chain; nothing here is a client-side fake state. */}
             <div className="col-span-2 p-4 rounded-2xl border border-indigo-500/20 bg-indigo-550/5 space-y-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                    <SettingsIcon className="w-4 h-4 text-indigo-400" /> {t("demo_mode_title")}
-                  </h4>
-                  <p className="text-[11px] text-slate-400">{t("demo_mode_desc")}</p>
-                </div>
+              <div>
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <SettingsIcon className="w-4 h-4 text-indigo-400" /> {t("claim_scenario_section_title")}
+                </h4>
+                <p className="text-[11px] text-slate-400">{t("claim_scenario_section_desc")}</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {[
-                  { id: "happy", label: t("demo_path_happy"), color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
-                  { id: "stale_jwk", label: t("demo_path_stale_jwk"), color: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
-                  { id: "wrong_wallet", label: t("demo_path_wrong_wallet"), color: "bg-red-500/10 text-red-400 border-red-500/20" },
-                  { id: "paused", label: t("demo_path_paused"), color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
-                  { id: "claimed", label: t("demo_path_claimed"), color: "bg-slate-500/10 text-slate-405 border-slate-500/20" },
+                  { id: "happy", label: t("claim_scenario_happy"), desc: t("claim_scenario_happy_desc"), color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+                  { id: "untrusted_kid", label: t("claim_scenario_untrusted"), desc: t("claim_scenario_untrusted_desc"), color: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
+                  { id: "tampered_proof", label: t("claim_scenario_tampered"), desc: t("claim_scenario_tampered_desc"), color: "bg-red-500/10 text-red-400 border-red-500/20" },
+                  { id: "replay", label: t("claim_scenario_replay"), desc: t("claim_scenario_replay_desc"), color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
                 ].map(p => (
                   <button
                     type="button"
                     key={p.id}
-                    onClick={() => {
-                      setDemoFailureScenario(p.id as any);
-                      if (p.id === "wrong_wallet") {
-                        setFreighterConnected(true);
-                        setFreighterAddress("GCSB5XWRONGWALLET498234902348902348902348");
-                      } else {
-                        if (freighterConnected) {
-                          setFreighterAddress("GCB5X7E7PXM3N5S5YF6K6R2G3F4H7J8K9L0M1N2P");
-                        }
-                      }
-                    }}
-                    className={`px-3 py-2 rounded-xl text-[10px] font-bold border transition ${demoFailureScenario === p.id
+                    onClick={() => { setClaimScenario(p.id as any); setClaimResult(null); setClaimError(""); }}
+                    className={`text-left px-3 py-2 rounded-xl text-[10px] font-bold border transition space-y-1 ${claimScenario === p.id
                       ? "bg-indigo-600 text-white border-transparent shadow-md shadow-indigo-600/15"
                       : p.color
                       }`}
                   >
-                    {p.label}
+                    <div>{p.label}</div>
+                    <div className={`font-normal normal-case leading-tight ${claimScenario === p.id ? "text-indigo-100" : "text-slate-500"}`}>{p.desc}</div>
                   </button>
                 ))}
               </div>
+              {claimScenario === "replay" && !lastClaimNullifier && (
+                <p className="text-[11px] text-amber-400">{t("claim_replay_hint")}</p>
+              )}
             </div>
 
             <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/25 space-y-6">
@@ -2248,36 +2297,6 @@ export default function Dashboard() {
                   <Gift className="w-5 h-5 text-indigo-400" /> {t("claim_portal_title")}
                 </h3>
                 <p className="text-xs text-slate-400 mb-4">{t("claim_portal_subtitle")}</p>
-              </div>
-
-              {/* 7-Step Stepper timeline indicators */}
-              <div className="grid grid-cols-7 gap-1 border-b border-slate-900/60 pb-5">
-                {[
-                  { step: 1, label: lang === "es" ? "Identificar" : "Identify" },
-                  { step: 2, label: lang === "es" ? "Verificar" : "Verify" },
-                  { step: 3, label: lang === "es" ? "Probar ZK" : "Prove ZK" },
-                  { step: 4, label: lang === "es" ? "Billetera" : "Wallet" },
-                  { step: 5, label: lang === "es" ? "Enviar" : "Submit" },
-                  { step: 6, label: lang === "es" ? "Liquidado" : "Settled" },
-                  { step: 7, label: lang === "es" ? "Recibo" : "Receipt" },
-                ].map((s) => {
-                  const currentStep = claimSuccessMsg ? 7 : (claimProving ? 3 : (freighterConnected ? 4 : (claimEmail && claimPin ? 2 : 1)));
-                  const active = currentStep >= s.step;
-                  return (
-                    <div key={s.step} className="flex flex-col items-center text-center space-y-1">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition ${active
-                        ? "bg-indigo-600 text-white border-transparent shadow-md shadow-indigo-600/10"
-                        : "bg-slate-950 text-slate-500 border-slate-900"
-                        }`}>
-                        {s.step}
-                      </div>
-                      <span className={`hidden sm:block text-[8px] font-mono tracking-tighter uppercase leading-tight ${active ? "text-indigo-400 font-bold" : "text-slate-600"
-                        }`}>
-                        {s.label}
-                      </span>
-                    </div>
-                  );
-                })}
               </div>
 
               {/* Stellar Wallets Kit Connect */}
@@ -2322,122 +2341,101 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <form onSubmit={handleExecuteClaim} className="space-y-4 text-sm">
-                <div>
-                  <label className="text-[10px] text-slate-500 block mb-2 font-mono uppercase font-bold tracking-widest">{t("claim_email")}</label>
-                  <input
-                    type="email"
-                    value={claimEmail}
-                    onChange={(e) => setClaimEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-350 focus:outline-none"
-                  />
+              {/* Real call parameters — no email/PIN/wallet form: the recipient
+                  is always the connected wallet claiming to itself. */}
+              <div className="p-4 rounded-xl border border-slate-900 bg-slate-950/40 space-y-2 text-xs font-mono">
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">{t("claim_vault_label")}:</span>
+                  <span className="text-slate-300 truncate max-w-[180px]" title={contractRegistry?.contracts?.vestingClaim}>{contractRegistry?.contracts?.vestingClaim ? `${contractRegistry.contracts.vestingClaim.slice(0, 8)}…${contractRegistry.contracts.vestingClaim.slice(-4)}` : "—"}</span>
                 </div>
-                <div>
-                  <label className="text-[10px] text-slate-500 block mb-2 font-mono uppercase font-bold tracking-widest">{t("claim_pin")}</label>
-                  <input
-                    type="password"
-                    value={claimPin}
-                    onChange={(e) => setClaimPin(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-350 focus:outline-none"
-                  />
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">{t("claim_kid_label")}:</span>
+                  <span className={claimScenario === "untrusted_kid" ? "text-amber-400" : "text-slate-300"}>{claimScenario === "untrusted_kid" ? "untrusted-demo-key" : "google-oauth-2026"}</span>
                 </div>
-                <div>
-                  <label className="text-[10px] text-slate-500 block mb-2 font-mono uppercase font-bold tracking-widest">{t("claim_wallet")}</label>
-                  <input
-                    type="text"
-                    value={claimWallet}
-                    onChange={(e) => setClaimWallet(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-350 font-mono text-xs focus:outline-none"
-                  />
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">{t("claim_amount_label")}:</span>
+                  <span className="text-slate-300">1 XLM</span>
                 </div>
-                <button
-                  type="submit"
-                  disabled={claimProving || (freighterConnected && freighterNetwork === "public")}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-4 rounded-xl transition duration-300 shadow-md shadow-indigo-550/10 disabled:opacity-50"
-                >
-                  {claimProving ? t("processing") : t("claim_btn_trigger")}
-                </button>
-              </form>
-            </div>
-
-            <div className="space-y-6">
-              {/* Vesting Timeline Graphical Widget */}
-              <div className="p-4 rounded-xl border border-slate-900 bg-slate-950/20 space-y-3.5">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">{t("vesting_schedule")}</h4>
-                <div className="relative pt-1">
-                  <div className="flex mb-2 items-center justify-between text-xs">
-                    <span className="text-slate-500">Cliff Lock (Ended)</span>
-                    <span className="text-emerald-400 font-bold">Standard Payout Claimable</span>
-                  </div>
-                  <div className="overflow-hidden h-2.5 text-xs flex rounded bg-slate-900 border border-slate-900">
-                    <div style={{ width: "30%" }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-rose-500/40"></div>
-                    <div style={{ width: "45%" }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500"></div>
-                    <div style={{ width: "25%" }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-600/30"></div>
-                  </div>
-                  <div className="flex justify-between text-[9px] text-slate-500 font-mono mt-1">
-                    <span>Cliff (Month 3)</span>
-                    <span>Standard Release (Month 9)</span>
-                    <span>Shielded Payout (Month 12)</span>
-                  </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">{t("claim_recipient_label")}:</span>
+                  <span className="text-slate-300 truncate max-w-[180px]">{freighterAddress || "—"}</span>
                 </div>
               </div>
 
-              {/* Claim Proving Console logs */}
-              {claimLogs.length > 0 && (
-                <div className="p-6 rounded-2xl border border-slate-900 bg-slate-950 space-y-4">
-                  <h4 className="text-xs font-bold text-indigo-400 font-mono uppercase tracking-widest flex items-center gap-1.5">
-                    <Terminal className="w-4 h-4" /> ZK-CLAIM PROVER TERMINAL
-                    <span className="text-[9px] font-sans normal-case tracking-normal text-slate-500">({t("simulated_log_tag")})</span>
-                  </h4>
-                  <div className="font-mono text-xs space-y-2">
-                    {claimLogs.map((log, idx) => (
-                      <div key={idx} className="flex gap-2">
-                        <span className="text-indigo-500 font-bold select-none">&gt;</span>
-                        <span className={log.includes("success") || log.includes("Settled") ? "text-emerald-400" : log.includes("ERROR") ? "text-rose-400 font-semibold" : "text-slate-300"}>{log}</span>
-                      </div>
-                    ))}
-                    {claimProving && (
-                      <div className="flex items-center gap-2 text-indigo-450">
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Generating cryptographic proof...</span>
-                      </div>
+              <button
+                type="button"
+                onClick={handleExecuteClaim}
+                disabled={claimBusy || !freighterConnected || (freighterConnected && freighterNetwork === "public")}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-4 rounded-xl transition duration-300 shadow-md shadow-indigo-550/10 disabled:opacity-50"
+              >
+                {claimBusy ? t("processing") : t("claim_btn_trigger")}
+              </button>
+              {!freighterConnected && <p className="text-[11px] text-amber-400 text-center">{t("jwt_onchain_connect")}</p>}
+              {claimError && (
+                <div className="flex items-start gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-xl px-4 py-3 break-all">
+                  <XCircle size={16} className="shrink-0 mt-0.5" /> {claimError}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-6">
+              {claimResult && claimResult.ok && (
+                <div className={`p-6 rounded-2xl border flex items-start gap-4 ${claimResult.scenario === "happy" ? "border-emerald-500/20 bg-emerald-500/5" : "border-amber-500/20 bg-amber-500/5"}`}>
+                  {claimResult.scenario === "happy" ? <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" /> : <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />}
+                  <div className="space-y-2 min-w-0">
+                    <h4 className="text-sm font-bold text-white">{claimResult.scenario === "happy" ? t("claim_success") : t("claim_anomaly_title")}</h4>
+                    <p className="text-xs text-slate-400">{claimResult.message}</p>
+                    {claimResult.url && (
+                      <a href={claimResult.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-indigo-300 hover:text-indigo-200 underline font-mono">
+                        {claimResult.hash?.slice(0, 16)}… ↗
+                      </a>
                     )}
                   </div>
-
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-900">
-                    <span className="text-[11px] text-slate-500 font-mono">
-                      Session renews in: <span className="text-amber-400 font-bold">{formatCountdown(claimCountdown)}</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setTechDrawerOpen(!techDrawerOpen)}
-                      className="text-xs text-indigo-400 hover:text-indigo-300 font-bold underline flex items-center gap-1"
-                    >
-                      <Code className="w-3.5 h-3.5" />
-                      {t("tech_drawer_title")}
-                    </button>
-                  </div>
-
-                  {techDrawerOpen && (
-                    <div className="p-4 rounded-xl border border-slate-900 bg-slate-950 font-mono text-[10px] space-y-2 mt-2">
-                      <div className="flex justify-between"><span className="text-slate-500">{t("tech_proof_type")}:</span><span className="text-slate-300">UltraHonk (Noir)</span></div>
-                      <div className="flex justify-between"><span className="text-slate-500">{t("tech_verifier_addr")}:</span><span className="text-indigo-400 select-all truncate max-w-[160px]" title={contractRegistry?.contracts?.ultrahonkVerifier || undefined}>{contractRegistry?.contracts?.ultrahonkVerifier ? `${contractRegistry.contracts.ultrahonkVerifier.slice(0,8)}…${contractRegistry.contracts.ultrahonkVerifier.slice(-4)}` : "CV254KVerifier1920384..."}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-500">{t("tech_key_id")}:</span><span className="text-slate-300">mock-google-key-id</span></div>
-                      <div className="flex justify-between"><span className="text-slate-500">{t("tech_session_nonce")}:</span><span className="text-slate-300 truncate max-w-[160px]">nonce_8a7d2f93d8b5c90...</span></div>
-                      <div className="flex justify-between"><span className="text-slate-500">{t("tech_commitment")}:</span><span className="text-slate-300 truncate max-w-[160px]">0x7d5a26814d8dcb93b0...</span></div>
-                      <div className="flex justify-between"><span className="text-slate-500">{t("tech_nullifier")}:</span><span className="text-slate-300 truncate max-w-[160px]">0x90210e3b0c44298fc1...</span></div>
-                      <div className="flex justify-between"><span className="text-slate-500">{t("tech_envelope")}:</span><span className="text-indigo-400 truncate max-w-[160px]">Envelope_xdr_Soroban_Tx</span></div>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {claimSuccessMsg && (
-                <div className="p-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 flex items-start gap-4">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-bold text-white mb-1">{t("claim_success")}</h4>
-                    <p className="text-xs text-slate-400">Transaction hash recorded and verified on Stellar ledger.</p>
+              {claimResult && !claimResult.ok && (
+                <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 space-y-3">
+                  <div className="flex items-start gap-4">
+                    <ShieldCheck className="w-6 h-6 text-indigo-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1 min-w-0">
+                      <h4 className="text-sm font-bold text-white">{t("claim_rejected_title")}</h4>
+                      <p className="text-xs text-slate-400">
+                        {claimResult.scenario === "untrusted_kid" && t("claim_scenario_untrusted_desc")}
+                        {claimResult.scenario === "tampered_proof" && t("claim_scenario_tampered_desc")}
+                        {claimResult.scenario === "replay" && t("claim_scenario_replay_desc")}
+                      </p>
+                    </div>
+                  </div>
+
+                  {claimResult.url ? (
+                    <a href={claimResult.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-indigo-300 hover:text-indigo-200 underline font-mono pl-10">
+                      {claimResult.hash?.slice(0, 16)}… ↗
+                    </a>
+                  ) : (
+                    <div className="pl-10 space-y-2">
+                      <p className="text-[11px] text-slate-500">{t("claim_no_hash_note")}</p>
+                      <a
+                        href={contractExplorerUrl(claimResult.scenario === "untrusted_kid" ? (contractRegistry?.contracts?.jwkRegistry || "") : (contractRegistry?.contracts?.vestingClaim || ""))}
+                        target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-indigo-300 hover:text-indigo-200 underline"
+                      >
+                        {claimResult.scenario === "untrusted_kid" ? t("claim_view_registry_contract") : t("claim_view_vault_contract")} ↗
+                      </a>
+                    </div>
+                  )}
+
+                  <div className="pl-10">
+                    <button
+                      type="button"
+                      onClick={() => setClaimRawOpen(!claimRawOpen)}
+                      className="text-[11px] text-slate-500 hover:text-slate-300 font-bold underline flex items-center gap-1"
+                    >
+                      <Code className="w-3 h-3" /> {claimRawOpen ? t("claim_hide_raw") : t("claim_show_raw")}
+                    </button>
+                    {claimRawOpen && (
+                      <pre className="mt-2 p-3 rounded-lg border border-slate-900 bg-slate-950 text-[9px] text-slate-400 font-mono overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap break-all">{claimResult.raw || claimResult.message}</pre>
+                    )}
                   </div>
                 </div>
               )}
@@ -2538,8 +2536,10 @@ export default function Dashboard() {
                         {key.status === "active" && (
                           <button
                             onClick={() => handleRevokeJwtKey(key.kid)}
-                            className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-bold transition"
+                            disabled={revokingKid === key.kid}
+                            className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/25 disabled:opacity-50 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-bold transition inline-flex items-center gap-1.5"
                           >
+                            {revokingKid === key.kid && <RefreshCw size={10} className="animate-spin" />}
                             {t("jwt_action_revoke")}
                           </button>
                         )}
@@ -2549,6 +2549,17 @@ export default function Dashboard() {
                 </tbody>
               </table>
             </div>
+            {revokeTx && (
+              <a href={revokeTx.url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3 hover:bg-emerald-500/15">
+                <CheckCircle2 size={16} className="shrink-0" /> {t("jwt_revoke_success")} <span className="font-mono">{revokeTx.kid}</span>
+                <span className="font-mono text-xs text-indigo-300 underline ml-auto">{revokeTx.hash.slice(0, 12)}… ↗</span>
+              </a>
+            )}
+            {revokeError && (
+              <div className="mt-3 flex items-start gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-xl px-4 py-3 break-all">
+                <XCircle size={16} className="shrink-0 mt-0.5" /> {revokeError}
+              </div>
+            )}
           </div>
         )}
 

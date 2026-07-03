@@ -209,18 +209,34 @@ export const translations = {
     dist_analytics_claimed: "Settled Private Claims",
     dist_analytics_pending: "Unclaimed Allocation",
 
-    // Recipient Claim
+    // Recipient Claim — a real, Freighter-signed claim() call against the
+    // funded vesting-claim vault, verified by the real Nethermind verifier.
     claim_portal_title: "Compliant Private Claim Portal",
-    claim_portal_subtitle: "Connect your identity privately, solve the local zero-knowledge proof, and claim your tokenized dollars to your Stellar wallet.",
-    claim_email: "Web2 Recipient Identity (Email / OAuth)",
-    claim_pin: "Private PIN code",
-    claim_wallet: "Stellar Wallet (Freighter address)",
-    claim_btn_trigger: "Verify Web2 Identity & Claim Payout",
-    claim_log_merkle: "Calculating Merkle path validation...",
-    claim_log_jwt: "Validating Google accounts JWT signature...",
-    claim_log_zk: "Generating Noir UltraHonk proof locally...",
-    claim_log_submit: "Routing proof coordinates to Soroban vault...",
-    claim_success: "Private USD payout settled and claimed!",
+    claim_portal_subtitle: "Execute a real, Freighter-signed claim() call against the funded vesting-claim vault on Stellar Testnet, verified by the real Nethermind UltraHonk verifier — no scripted terminal, no simulated outcomes.",
+    claim_btn_trigger: "Execute real on-chain claim",
+    claim_success: "Claim settled on-chain — funds genuinely transferred.",
+    claim_scenario_section_title: "Claim scenario (real on-chain behavior)",
+    claim_scenario_section_desc: "Each button changes real call parameters sent to the deployed contract. Untrusted key, tampered proof, and replay are all genuinely rejected by Soroban's mandatory pre-flight simulation — before your wallet is ever asked to sign, so no fee is charged and no transaction is submitted for those three.",
+    claim_scenario_happy: "Happy Path",
+    claim_scenario_untrusted: "Untrusted Key ID",
+    claim_scenario_tampered: "Tampered Proof",
+    claim_scenario_replay: "Replay / Double-Claim",
+    claim_scenario_happy_desc: "Real proof, on-chain trusted key, fresh nullifier — succeeds and transfers funds.",
+    claim_scenario_untrusted_desc: "Uses a kid never registered in the on-chain JWK registry — is_key_trusted() genuinely returns false.",
+    claim_scenario_tampered_desc: "Flips one byte of the real proof — the real UltraHonk pairing check genuinely fails.",
+    claim_scenario_replay_desc: "Reuses a nullifier already spent by a prior Happy Path run — the vault's real double-claim guard rejects it.",
+    claim_replay_hint: "Run Happy Path once first to create a spent nullifier this scenario can replay.",
+    claim_vault_label: "Vesting-claim vault",
+    claim_kid_label: "Key ID (kid) used",
+    claim_amount_label: "Claim amount",
+    claim_recipient_label: "Recipient (connected wallet)",
+    claim_rejected_title: "Correctly rejected on-chain",
+    claim_anomaly_title: "Unexpected result",
+    claim_no_hash_note: "Soroban simulates every call before your wallet is ever asked to sign. A call that will certainly fail is rejected right here — for free, with no signature requested and no transaction ever submitted. This rejection, straight from the public RPC, is the real evidence; there is no tx hash because none was ever submitted.",
+    claim_show_raw: "Show raw Soroban diagnostic",
+    claim_hide_raw: "Hide raw diagnostic",
+    claim_view_vault_contract: "View real vault contract",
+    claim_view_registry_contract: "View real JWK registry contract",
 
     // JWT Operations
     jwt_ops_title: "OIDC Identity Ops",
@@ -232,6 +248,7 @@ export const translations = {
     jwt_onchain_btn: "Register on-chain",
     jwt_onchain_signing: "Signing & submitting…",
     jwt_onchain_success: "Registered on-chain — tx",
+    jwt_revoke_success: "Revoked on-chain —",
     jwt_provider: "OIDC Provider",
     jwt_key_id: "Certificate Key ID (kid)",
     jwt_modulus: "RSA Modulus (n)",
@@ -245,42 +262,14 @@ export const translations = {
     wallet_disconnect: "Disconnect Wallet",
     wallet_connected: "Freighter Connected: ",
     wallet_wrong_network: "Warning: Freighter on public network. Switch to Testnet.",
-    wallet_mismatch_warning: "Freighter address mismatch! Claim requires active wallet: ",
-    wallet_mismatch_desc: "The active Freighter address does not match the recipient wallet address. Please switch Freighter account or adjust inputs.",
     wallet_install_prompt: "Freighter Extension not detected. Install Freighter to claim.",
     wallet_switch: "Switch Account",
 
-    // Demo Failure Path
-    simulated_log_tag: "scripted walkthrough, not a live prover",
-    demo_mode_title: "QA Test Harness — Simulated Validation Scenarios",
-    demo_mode_desc: "This portal illustrates the claim UX and forces specific client-side validation states for demo/QA purposes; the proof log below is a scripted walkthrough, not a live prover. For a genuine, reproducible on-chain UltraHonk proof (real pass/fail), see Security → Run Live Check, or run the terminal reproducer in contracts/real-verifier/.",
-    demo_path_happy: "Happy Path (Valid Claim)",
-    demo_path_stale_jwk: "Stale JWK (Requires Sync)",
-    demo_path_wrong_wallet: "Wrong Wallet Address",
-    demo_path_paused: "Paused Vault (Locked)",
-    demo_path_claimed: "Already Claimed (Double Spent)",
-
-    // Technical Details Drawer
-    tech_drawer_title: "Technical Proof Metadata",
-    tech_proof_type: "ZK Circuit Type",
-    tech_verifier_addr: "Verifier Contract",
-    tech_key_id: "OIDC Key ID (kid)",
-    tech_session_nonce: "Session Nonce Hash",
-    tech_commitment: "Recipient Commitment",
-    tech_nullifier: "Nullifier Spent Hash",
-    tech_envelope: "Soroban Envelope Tx",
-
     // Vesting Schedule
-    vesting_schedule: "Vesting Payout Timeline",
     vesting_cliff: "Cliff Lock (No Claim)",
     vesting_standard: "Standard Release",
     vesting_confidential: "Confidential Shielded Payout",
-    vesting_complete: "Vesting Complete",
-
-    // Sync & Alerts
-    alert_sync_blocked: "Claims are currently blocked. Registry public key ID not synchronized on-chain.",
-    alert_paused_blocked: "Distribution Vault Paused by administrator. Payouts are temporarily locked.",
-    alert_already_spent: "This private allocation has already been claimed! Double-spending nullifier recorded."
+    vesting_complete: "Vesting Complete"
   },
   es: {
     brand_subtitle: "Distribución de USD Privada",
@@ -492,16 +481,31 @@ export const translations = {
 
     // Recipient Claim
     claim_portal_title: "Portal de Reclamación Privada Regulada",
-    claim_portal_subtitle: "Conecte su identidad de forma privada, resuelva la prueba de conocimiento cero local y reclame sus dólares tokenizados a su billetera Stellar.",
-    claim_email: "Identidad del Beneficiario Web2 (Email / OAuth)",
-    claim_pin: "Código PIN Privado",
-    claim_wallet: "Billetera Stellar (Dirección Freighter)",
-    claim_btn_trigger: "Verificar Identidad Web2 y Reclamar Pago",
-    claim_log_merkle: "Calculando la validación de la ruta Merkle...",
-    claim_log_jwt: "Validando la firma JWT de las cuentas de Google...",
-    claim_log_zk: "Generando prueba Noir UltraHonk localmente...",
-    claim_log_submit: "Enviando coordenadas de la prueba a la bóveda Soroban...",
-    claim_success: "¡Pago privado de USD liquidado y reclamado!",
+    claim_portal_subtitle: "Ejecuta una llamada real a claim() firmada con Freighter contra la bóveda de vesting fondeada en Stellar Testnet, verificada por el verificador UltraHonk real de Nethermind — sin terminal guionizada, sin resultados simulados.",
+    claim_btn_trigger: "Ejecutar claim real on-chain",
+    claim_success: "Reclamo liquidado on-chain — fondos genuinamente transferidos.",
+    claim_scenario_section_title: "Escenario de reclamo (comportamiento real on-chain)",
+    claim_scenario_section_desc: "Cada botón cambia parámetros reales enviados al contrato desplegado. Clave no confiable, prueba alterada y repetición (replay) son genuinamente rechazados por la simulación previa obligatoria de Soroban — antes de pedirle a tu billetera que firme, así que no se cobra comisión ni se envía transacción en esos tres casos.",
+    claim_scenario_happy: "Camino Feliz",
+    claim_scenario_untrusted: "Clave (kid) No Confiable",
+    claim_scenario_tampered: "Prueba Alterada",
+    claim_scenario_replay: "Repetición / Doble Reclamo",
+    claim_scenario_happy_desc: "Prueba real, clave confiable on-chain, nullifier nuevo — tiene éxito y transfiere fondos.",
+    claim_scenario_untrusted_desc: "Usa un kid nunca registrado en el registro JWK on-chain — is_key_trusted() genuinamente devuelve false.",
+    claim_scenario_tampered_desc: "Invierte un byte de la prueba real — la verificación de emparejamiento UltraHonk real genuinamente falla.",
+    claim_scenario_replay_desc: "Reutiliza un nullifier ya gastado por una ejecución previa de Camino Feliz — el guardia real de doble reclamo de la bóveda lo rechaza.",
+    claim_replay_hint: "Ejecuta Camino Feliz una vez primero para crear un nullifier gastado que este escenario pueda repetir.",
+    claim_vault_label: "Bóveda de vesting-claim",
+    claim_kid_label: "Key ID (kid) usado",
+    claim_amount_label: "Monto del reclamo",
+    claim_recipient_label: "Destinatario (billetera conectada)",
+    claim_rejected_title: "Correctamente rechazado on-chain",
+    claim_anomaly_title: "Resultado inesperado",
+    claim_no_hash_note: "Soroban simula cada llamada antes de pedirle a tu billetera que firme. Una llamada que ciertamente fallará se rechaza aquí mismo — gratis, sin pedir firma y sin enviar nunca una transacción. Este rechazo, directo del RPC público, es la evidencia real; no hay hash de tx porque nunca se envió ninguna.",
+    claim_show_raw: "Mostrar diagnóstico crudo de Soroban",
+    claim_hide_raw: "Ocultar diagnóstico crudo",
+    claim_view_vault_contract: "Ver contrato real de la bóveda",
+    claim_view_registry_contract: "Ver contrato real del registro JWK",
 
     // JWT Operations
     jwt_onchain_title: "Registrar una clave OIDC on-chain",
@@ -510,6 +514,7 @@ export const translations = {
     jwt_onchain_btn: "Registrar on-chain",
     jwt_onchain_signing: "Firmando y enviando…",
     jwt_onchain_success: "Registrada on-chain — tx",
+    jwt_revoke_success: "Revocada on-chain —",
     jwt_ops_title: "Operaciones de Identidad OIDC",
     jwt_ops_subtitle: "Registro de certificados públicos activos utilizados por los contratos de Soroban para verificar a los beneficiarios de Web2.",
     jwt_btn_sync: "Actualizar Registro de Claves OIDC",
@@ -526,41 +531,13 @@ export const translations = {
     wallet_disconnect: "Desconectar Billetera",
     wallet_connected: "Freighter Conectado: ",
     wallet_wrong_network: "Advertencia: Freighter en red pública. Cambie a Testnet.",
-    wallet_mismatch_warning: "¡Incompatibilidad de Freighter! La reclamación requiere: ",
-    wallet_mismatch_desc: "La dirección Freighter activa no coincide con la de destino. Cambie de cuenta en Freighter o ajuste la entrada.",
     wallet_install_prompt: "Extensión Freighter no detectada. Instale Freighter para reclamar.",
     wallet_switch: "Cambiar Cuenta",
 
-    // Demo Failure Path
-    simulated_log_tag: "guion ilustrativo, no un prover en vivo",
-    demo_mode_title: "Entorno de QA — Escenarios de Validación Simulados",
-    demo_mode_desc: "Este portal ilustra la UX del reclamo y fuerza estados de validación específicos del lado del cliente para fines de demo/QA; el registro de prueba abajo es un guion ilustrativo, no un prover en vivo. Para una prueba UltraHonk real y reproducible on-chain (con caso positivo y negativo real), ve a Security → Run Live Check, o corre el reproducer de terminal en contracts/real-verifier/.",
-    demo_path_happy: "Camino Feliz (Reclamación Válida)",
-    demo_path_stale_jwk: "JWK Caducado (Requiere Sincronización)",
-    demo_path_wrong_wallet: "Dirección de Billetera Incorrecta",
-    demo_path_paused: "Bóveda Pausada (Bloqueada)",
-    demo_path_claimed: "Ya Reclamado (Doble Gasto)",
-
-    // Technical Details Drawer
-    tech_drawer_title: "Metadatos Técnicos de la Bóveda",
-    tech_proof_type: "Tipo de Circuito ZK",
-    tech_verifier_addr: "Contrato de Verificador",
-    tech_key_id: "ID de Clave OIDC (kid)",
-    tech_session_nonce: "Hash del Nonce de Sesión",
-    tech_commitment: "Compromiso de Beneficiario",
-    tech_nullifier: "Hash del Nullificador Gastado",
-    tech_envelope: "Transacción de Sobre Soroban",
-
     // Vesting Schedule
-    vesting_schedule: "Línea Temporal de Vesting",
     vesting_cliff: "Bloqueo de Cliff (Sin Payout)",
     vesting_standard: "Liberación Estándar",
     vesting_confidential: "Payout Protegido Confidencial",
-    vesting_complete: "Vesting Completado",
-
-    // Sync & Alerts
-    alert_sync_blocked: "Las reclamaciones están bloqueadas. El ID de clave pública del registro no está sincronizado en cadena.",
-    alert_paused_blocked: "Bóveda de Distribución Pausada por el administrador. Los payouts están bloqueados temporalmente.",
-    alert_already_spent: "¡Esta asignación privada ya ha sido reclamada! Registro de nullificador de doble gasto guardado."
+    vesting_complete: "Vesting Completado"
   }
 };

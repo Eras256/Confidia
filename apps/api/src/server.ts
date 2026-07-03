@@ -10,7 +10,7 @@ import {
   ConfidentialTokenClient,
   StellarAgentClient
 } from "confidia-sdk";
-import { Keypair, TransactionBuilder, Networks, Operation, Account } from "@stellar/stellar-sdk";
+import { Keypair, TransactionBuilder, Networks, Operation, Account, Asset, Horizon } from "@stellar/stellar-sdk";
 import jwt from "jsonwebtoken";
 import * as fs from "fs";
 import * as path from "path";
@@ -124,6 +124,53 @@ app.get("/confidia/contracts", (c) => {
     deployed,
     explorerBase: "https://stellar.expert/explorer/testnet/contract",
   });
+});
+
+// Narrowly-scoped treasury action: establishes a trustline for a given
+// classic asset on the treasury account, signed server-side with
+// STELLAR_WALLET_SECRET. This endpoint can ONLY ever build a changeTrust
+// operation — it cannot move funds or perform any other action — so a
+// compromised deployment of this endpoint has bounded blast radius (an
+// attacker could add/remove trustlines, not drain the account). Requested
+// explicitly by the project owner to eliminate "no trustline" payment
+// failures for whatever real asset a connected wallet happens to hold.
+app.post("/confidia/treasury/ensure-trustline", async (c) => {
+  const { assetCode, issuer } = await c.req.json();
+  if (!assetCode || !issuer) {
+    return c.json({ error: "Missing assetCode or issuer" }, 400);
+  }
+  const treasurySecret = process.env.STELLAR_WALLET_SECRET;
+  if (!treasurySecret) {
+    return c.json({ error: "Treasury signing key not configured on this deployment" }, 501);
+  }
+  try {
+    const horizonUrl = process.env.STELLAR_HORIZON_URL || "https://horizon-testnet.stellar.org";
+    const server = new Horizon.Server(horizonUrl);
+    const kp = Keypair.fromSecret(treasurySecret);
+    const account = await server.loadAccount(kp.publicKey());
+
+    const already = account.balances.some(
+      (b: any) => b.asset_code === assetCode && b.asset_issuer === issuer
+    );
+    if (already) {
+      return c.json({ success: true, alreadyTrusted: true });
+    }
+
+    const asset = new Asset(assetCode, issuer);
+    const tx = new TransactionBuilder(account, {
+      fee: "10000",
+      networkPassphrase: process.env.STELLAR_NETWORK === "mainnet" ? Networks.PUBLIC : Networks.TESTNET,
+    })
+      .addOperation(Operation.changeTrust({ asset }))
+      .setTimeout(60)
+      .build();
+    tx.sign(kp);
+    const result = await server.submitTransaction(tx);
+    return c.json({ success: true, alreadyTrusted: false, hash: result.hash });
+  } catch (error: any) {
+    const codes = error?.response?.data?.extras?.result_codes;
+    return c.json({ error: `Failed to establish trustline: ${codes ? JSON.stringify(codes) : error.message}` }, 500);
+  }
 });
 
 // 2. LCP lifecycle management

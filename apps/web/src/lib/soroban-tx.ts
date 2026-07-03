@@ -147,7 +147,17 @@ export async function writeContract(
     .build();
 
   const sim = await server.simulateTransaction(tx);
-  if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error);
+  if (rpc.Api.isSimulationError(sim)) {
+    // Soroban simulates every invocation before ever asking the wallet to
+    // sign — a call that will certainly fail (e.g. an untrusted key, a
+    // tampered proof, a replayed nullifier) is rejected right here, for free,
+    // with no signature requested and no transaction ever submitted to the
+    // network. That means there is genuinely no tx hash for this case — the
+    // rejection itself, straight from the public RPC, is the real evidence.
+    const e: any = new Error(sim.error);
+    e.stage = 'simulation';
+    throw e;
+  }
   tx = rpc.assembleTransaction(tx, sim).build();
 
   const signedXdr = await signTransactionXDR(tx.toXDR(), sourceAddress, NETWORK_PASSPHRASE);
@@ -155,7 +165,9 @@ export async function writeContract(
     TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE)
   );
   if (sent.status === 'ERROR') {
-    throw new Error(`Submit rejected: ${JSON.stringify((sent as any).errorResult ?? sent.status)}`);
+    const e: any = new Error(`Submit rejected: ${JSON.stringify((sent as any).errorResult ?? sent.status)}`);
+    e.stage = 'submit';
+    throw e;
   }
 
   const hash = sent.hash;
@@ -171,6 +183,7 @@ export async function writeContract(
     const e: any = new Error(reason ? `Transaction failed on-chain: ${reason}` : `Transaction failed on-chain`);
     e.hash = hash;
     e.explorerUrl = txExplorerUrl(hash);
+    e.stage = 'confirmed';
     throw e;
   }
 
