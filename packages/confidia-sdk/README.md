@@ -2,7 +2,7 @@
 
 Legal Context Protocol (LCP) client and a compliance policy engine, extracted
 from [Confidia](https://github.com/Eras256/Confidia) — private, compliant
-distribution rails for tokenized USD (USDC/EURC) on Stellar. Live demo:
+distribution rails for tokenized USD (USDC) on Stellar. Live demo:
 [confidia.vercel.app](https://confidia.vercel.app).
 
 Everything this package exports is real, dependency-free logic — no mocks, no

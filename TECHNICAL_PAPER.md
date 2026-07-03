@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Tokenization has largely solved the *issuance* of digital dollars: USDC, EURC, and
+Tokenization has largely solved the *issuance* of digital dollars: USDC and
 a growing set of regulated stablecoins settle instantly on public ledgers.
 *Distribution*, however, remains the bottleneck. Paying contributors, running
 confidential payroll, or releasing investor allocations on a transparent ledger
@@ -79,7 +79,7 @@ layer** on top of the confidential-balance primitive.
    ┌───────────────────────────────────────────────────────────────┐
    │                 contracts/  (Soroban, Rust)                    │
    │  gateway · vesting-claim · ultrahonk-verifier · compliance ·   │
-   │  jwk-registry            → SEP-41 USDC/EURC settlement         │
+   │  jwk-registry                    → SEP-41 USDC settlement      │
    └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -392,7 +392,7 @@ production work is swapping the demonstration circuit (`assert(x != y)`) for Con
 OIDC-identity + Merkle-inclusion circuit and generating claim proofs in the browser — the
 same verifier and the same pipeline, a different circuit and VK.
 
-Other roadmap items: (1) production USDC/EURC SAC as the vault funding asset
+Other roadmap items: (1) production USDC SAC as the vault funding asset
 (demo uses native XLM); (2) mainnet deployment; (3) formal verification of the
 nullifier/authorization invariants; (4) LCP registry standardization.
 

@@ -6,7 +6,7 @@ const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || Network
 const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL || 'https://horizon-testnet.stellar.org';
 
 export interface WalletBalance {
-  code: string;       // e.g. "XLM", "USDC", "EURC" — whatever the issuer/trustline actually names it
+  code: string;       // e.g. "XLM", "USDC" — whatever the issuer/trustline actually names it
   issuer: string | null; // null for native XLM
   balance: string;
   assetType: string;
@@ -15,7 +15,7 @@ export interface WalletBalance {
 /**
  * Reads the REAL balances of a Stellar account straight from Horizon — no
  * hardcoded asset/issuer addresses. Returns whatever classic assets (USDC,
- * EURC, or anything else) the connected wallet actually holds a trustline +
+ * or anything else) the connected wallet actually holds a trustline +
  * balance for, so the UI never guesses at a possibly-wrong issuer.
  */
 export async function fetchAccountBalances(address: string): Promise<WalletBalance[]> {

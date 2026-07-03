@@ -45,7 +45,7 @@ claim rejections are the money shots — don't rush them.**
   and installable: `npm install confidia-sdk`.
 - The in-app **Docs** tab (menu) lists every contract address, the REST API, the
   reproducer command, and now the npm SDK panel too — a clean place to point judges.
-- On real USDC/EURC on testnet: the deposit form shows whatever your connected
+- On real USDC on testnet: the deposit form shows whatever your connected
   wallet actually holds (queried live, no assumed issuer). Native XLM via
   Friendbot works today with zero extra setup and is what the Claim Portal's
   happy-path scenario uses (1 XLM per real claim, kept small so the shared demo

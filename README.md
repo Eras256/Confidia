@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/ZK-Noir%20%2F%20UltraHonk-9b59b6" alt="ZK Proofs" />
   <img src="https://img.shields.io/badge/Wallet-SEP--43%20%2F%20Stellar%20Wallets%20Kit-orange" alt="SEP-43 Wallets" />
   <img src="https://img.shields.io/badge/Auth-SEP--10%20%2F%20OIDC-green" alt="SEP-10 Auth" />
-  <img src="https://img.shields.io/badge/Tokens-SEP--41%20(USDC%20%2F%20EURC)-yellow" alt="SEP-41 Tokens" />
+  <img src="https://img.shields.io/badge/Tokens-SEP--41%20(USDC)-yellow" alt="SEP-41 Tokens" />
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License" />
 </p>
 
@@ -21,7 +21,7 @@
 
 ## Overview
 
-Confidia is an **institutional-grade, zero-knowledge private distribution registry and compliant claim gateway** for tokenized dollars (USDC / EURC) on the [Stellar](https://stellar.org) network.
+Confidia is an **institutional-grade, zero-knowledge private distribution registry and compliant claim gateway** for tokenized dollars (USDC) on the [Stellar](https://stellar.org) network.
 
 > *Tokenization solved issuance. Distribution is the bottleneck.*
 

@@ -250,7 +250,7 @@ export default function Dashboard() {
 
   // Reads the connected wallet's REAL Horizon balances (no hardcoded asset
   // addresses) so the Confidential Treasury deposit form always reflects
-  // whatever the user actually holds (native XLM, real testnet USDC/EURC, etc.)
+  // whatever the user actually holds (native XLM, real testnet USDC, etc.)
   const refreshWalletBalances = async (address: string) => {
     setBalancesLoading(true);
     try {
@@ -880,7 +880,6 @@ export default function Dashboard() {
   const [execAgentId, setExecAgentId] = useState<string>("agent-1");
   const [execDomain, setExecDomain] = useState<string>("treasury.example.mx");
   const [execAmount, setExecAmount] = useState<number>(10);
-  const [execAsset, setExecAsset] = useState<string>("XLM");
   const [lastPaymentTx, setLastPaymentTx] = useState<{ hash: string; url: string } | null>(null);
 
   // Wrapper balances (view key decryption demo)
@@ -1343,8 +1342,8 @@ export default function Dashboard() {
                 </h3>
                 <p className="text-sm text-slate-400 max-w-3xl leading-relaxed">
                   {lang === "es"
-                    ? "Confidia proporciona canales de distribución de conocimiento cero (ZK) para dólares tokenizados (USDC/EURC) en Stellar. Permita reclamaciones privadas, nóminas confidenciales y desembolsos de subvenciones sin revelar la identidad de los beneficiarios en la cadena de bloques pública, al tiempo que garantiza el cumplimiento total y la auditoría institucional."
-                    : "Confidia provides zero-knowledge (ZK) distribution rails for tokenized dollars (USDC/EURC) on Stellar. Enable private claims, confidential payroll, and grant payouts without exposing recipient identities on the public ledger, while guaranteeing full legal compliance and institutional auditing controls."}
+                    ? "Confidia proporciona canales de distribución de conocimiento cero (ZK) para dólares tokenizados (USDC) en Stellar. Permita reclamaciones privadas, nóminas confidenciales y desembolsos de subvenciones sin revelar la identidad de los beneficiarios en la cadena de bloques pública, al tiempo que garantiza el cumplimiento total y la auditoría institucional."
+                    : "Confidia provides zero-knowledge (ZK) distribution rails for tokenized dollars (USDC) on Stellar. Enable private claims, confidential payroll, and grant payouts without exposing recipient identities on the public ledger, while guaranteeing full legal compliance and institutional auditing controls."}
                 </p>
               </div>
             </div>
@@ -1505,27 +1504,14 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div className="col-span-2">
-                      <label className="text-[10px] text-slate-500 block mb-1.5 font-mono uppercase font-bold tracking-widest">{t("amount")}</label>
-                      <input
-                        type="number"
-                        value={execAmount}
-                        onChange={(e) => setExecAmount(Number(e.target.value))}
-                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-200 text-xs font-bold focus:border-indigo-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-500 block mb-1.5 font-mono uppercase font-bold tracking-widest">Asset</label>
-                      <select
-                        value={execAsset}
-                        onChange={(e) => setExecAsset(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-200 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-                      >
-                        <option value="USDC">USDC</option>
-                        <option value="EURC">EURC</option>
-                      </select>
-                    </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 block mb-1.5 font-mono uppercase font-bold tracking-widest">{t("amount")}</label>
+                    <input
+                      type="number"
+                      value={execAmount}
+                      onChange={(e) => setExecAmount(Number(e.target.value))}
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-200 text-xs font-bold focus:border-indigo-500 focus:outline-none"
+                    />
                   </div>
 
                   <button
@@ -1754,7 +1740,7 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Real SEP-41 deposit — reads the connected wallet's actual balances via
-                  Horizon (no hardcoded USDC/EURC issuer addresses) and signs a real
+                  Horizon (no hardcoded USDC issuer address) and signs a real
                   payment with Freighter. */}
               <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/30">
                 <h3 className="text-lg font-bold text-white mb-1.5">{t("wrap_tokens_title")}</h3>

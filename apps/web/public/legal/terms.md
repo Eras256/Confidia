@@ -1,7 +1,7 @@
 # Confidia — Legal Context Protocol Terms
 
 1. Confidia is institutional infrastructure for zero-knowledge distribution of
-   tokenized USD (USDC/EURC) on the Stellar network.
+   tokenized USD (USDC) on the Stellar network.
 2. Settlements executed under this Legal Context are governed by the laws of
    the counterparty's declared jurisdiction and resolved via UNCITRAL
    arbitration rules unless a signed agreement states otherwise.
