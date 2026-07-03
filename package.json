@@ -10,15 +10,17 @@
     "test:contracts": "cargo test --manifest-path contracts/Cargo.toml",
     "build:contracts": "RUSTFLAGS=\"-C target-feature=-reference-types,-multivalue\" cargo +nightly-2025-02-04 build --manifest-path contracts/Cargo.toml --target wasm32-unknown-unknown --release -Z build-std=std,panic_abort",
     "deploy:contracts": "node packages/confidia-sdk/scripts/deploy.js",
+    "db:migrate": "node scripts/db/migrate.js",
     "lint": "eslint . --ext .ts,.tsx",
     "confidia:init": "node packages/confidia-sdk/dist/esm/scripts/confidia-init.js"
   },
   "devDependencies": {
-    "typescript": "^5.4.5",
-    "ts-node": "^10.9.2",
     "@types/node": "^20.12.12",
     "eslint": "^8.57.0",
-    "prettier": "^3.2.5"
+    "pg": "^8.22.0",
+    "prettier": "^3.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
   },
   "packageManager": "pnpm@9.1.4"
 }

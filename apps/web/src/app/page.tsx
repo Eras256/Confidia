@@ -36,12 +36,14 @@ import {
   X
 } from "lucide-react";
 import { Language, translations } from "./translations";
-import { connectWallet } from "../lib/wallet-kit";
+import { connectWallet, getStoredAddress, disconnectWallet } from "../lib/wallet-kit";
 import { authenticateWithWallet } from "../lib/auth";
 import { readContract, writeContract, sendPayment, fetchAccountBalances, type WalletBalance } from "../lib/soroban-tx";
 import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const SESSION_STORAGE_KEY = "confidia_session_v1"; // { address, token, exp }
+const LANG_STORAGE_KEY = "confidia_lang";
 
 // Build-time fallback for the on-chain contract registry. Next.js inlines
 // NEXT_PUBLIC_* at build time, so the deployed addresses render even when the
@@ -67,6 +69,14 @@ const ENV_REGISTRY = Object.values(ENV_CONTRACTS).some(Boolean)
 export default function Dashboard() {
   const [lang, setLang] = useState<Language>("en");
   const [activeTab, setActiveTab] = useState<string>("overview");
+  // Restore language preference on mount; persist on every change.
+  useEffect(() => {
+    const saved = localStorage.getItem(LANG_STORAGE_KEY) as Language | null;
+    if (saved === "en" || saved === "es") setLang(saved);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
+  }, [lang]);
   const [loading, setLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>("");
 
@@ -195,9 +205,40 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [freighterConnected, freighterAddress]);
 
+  // Restore the wallet connection + SEP-10 session across page refreshes.
+  // The Stellar Wallets Kit already persists which wallet/address was selected
+  // (localStorage keys @StellarWalletsKit/*) and seeds itself from them on load,
+  // so getStoredAddress() returns the address with no modal/prompt. Our own
+  // JWT is persisted separately (the kit doesn't know about our backend auth).
+  useEffect(() => {
+    (async () => {
+      const address = await getStoredAddress();
+      if (!address) return;
+      setFreighterConnected(true);
+      setFreighterAddress(address);
+      try {
+        const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (saved.address === address && saved.exp > Date.now()) {
+            setJwtToken(saved.token);
+            setIsAuthenticated(true);
+          } else {
+            localStorage.removeItem(SESSION_STORAGE_KEY);
+          }
+        }
+      } catch {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleConnectFreighter = async () => {
     try {
       if (freighterConnected) {
+        await disconnectWallet();
+        localStorage.removeItem(SESSION_STORAGE_KEY);
         setFreighterConnected(false);
         setFreighterAddress("");
         setIsAuthenticated(false);
@@ -207,17 +248,21 @@ export default function Dashboard() {
         const result = await connectWallet();
         setFreighterConnected(true);
 
-        if (demoFailureScenario === "wrong_wallet") {
-          setFreighterAddress("GCSB5XWRONGWALLET498234902348902348902348");
-        } else {
-          setFreighterAddress(result.address);
-        }
+        const address = demoFailureScenario === "wrong_wallet"
+          ? "GCSB5XWRONGWALLET498234902348902348902348"
+          : result.address;
+        setFreighterAddress(address);
 
         // Trigger SEP-10 Authentication challenge
         setStatusMessage(lang === "es" ? "Iniciando desafío WebAuth SEP-10..." : "Initiating SEP-10 WebAuth challenge...");
-        const token = await authenticateWithWallet(result.address);
+        const token = await authenticateWithWallet(address);
         setJwtToken(token);
         setIsAuthenticated(true);
+        // Persist the session so a page refresh doesn't lose it (1h, matching the
+        // API's JWT expiry).
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+          address, token, exp: Date.now() + 60 * 60 * 1000,
+        }));
         setStatusMessage(lang === "es" ? "¡Autenticación SEP-10 exitosa!" : "SEP-10 authentication successful!");
         setTimeout(() => setStatusMessage(""), 2000);
       }

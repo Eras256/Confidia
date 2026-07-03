@@ -11,10 +11,12 @@
   "dependencies": {
     "@hono/node-server": "^1.11.1",
     "@stellar/stellar-sdk": "^16.0.1",
+    "@supabase/supabase-js": "^2.45.4",
     "@types/jsonwebtoken": "^9.0.10",
     "confidia-config": "workspace:^1.0.0",
     "confidia-sdk": "workspace:^1.0.0",
     "confidia-distributions-sdk": "workspace:^1.0.0",
+    "confidia-jwt-sdk": "workspace:^1.0.0",
     "confidia-test-utils": "workspace:^1.0.0",
     "hono": "^4.3.7",
     "jsonwebtoken": "^9.0.3"

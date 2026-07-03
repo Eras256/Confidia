@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
 import { MockSupabaseClient } from "confidia-test-utils";
+import { createClient } from "@supabase/supabase-js";
 import {
   LcpClient,
   PolicyEngine,
@@ -78,7 +79,20 @@ app.get("/", (c) =>
   })
 );
 
-const supabase = new MockSupabaseClient();
+// Real Supabase Postgres persistence (service-role key — server-only, never
+// exposed to the frontend). Falls back to the file-backed MockSupabaseClient
+// only when no Supabase credentials are configured, so `pnpm dev` still works
+// out of the box for a fresh local clone with zero setup.
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase: any = supabaseUrl && supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false } })
+  : new MockSupabaseClient();
+if (supabaseUrl && supabaseServiceRoleKey) {
+  console.log("[API] Using real Supabase persistence (Postgres).");
+} else {
+  console.warn("[API] SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY not set — falling back to MockSupabaseClient (db.json). Set them for real persistence.");
+}
 const isTestMode = process.env.NODE_ENV !== "production";
 const lcpClient = new LcpClient(isTestMode);
 const policyEngine = new PolicyEngine();

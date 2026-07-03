@@ -3,7 +3,10 @@
 # --ignore-scripts so native addons pulled transitively by the workspace
 # (usb/secp256k1/trezor, only used by the web app's hardware wallets) are NOT
 # compiled — the API runs pure-JS and needs none of them.
-FROM node:20-alpine AS base
+# Node 22 (not 20): @supabase/supabase-js's realtime client requires native
+# WebSocket, unavailable on Node < 22 — it throws at client construction time
+# even though we only use the REST query builder, not realtime subscriptions.
+FROM node:22-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable

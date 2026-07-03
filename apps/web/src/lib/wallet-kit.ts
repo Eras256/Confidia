@@ -49,6 +49,33 @@ export async function connectWallet() {
   return result; // resolves with { address: string }
 }
 
+/**
+ * The kit persists `selectedModuleId` + `activeAddress` in localStorage itself
+ * (keys `@StellarWalletsKit/*`) and seeds its in-memory signals from them at
+ * module load. So after a page refresh, `getAddress()` already returns the
+ * previously connected address — no need to reopen the connect modal. Call
+ * this once on mount to silently restore the session.
+ */
+export async function getStoredAddress(): Promise<string | null> {
+  ensureKitInitialized();
+  try {
+    const { address } = await StellarWalletsKit.getAddress();
+    return address || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Clears the kit's persisted wallet selection (pairs with our own session cleanup). */
+export async function disconnectWallet() {
+  ensureKitInitialized();
+  try {
+    await StellarWalletsKit.disconnect();
+  } catch {
+    /* no-op — some modules don't implement an explicit disconnect */
+  }
+}
+
 export async function signTransactionXDR(xdr: string, address: string, networkPassphrase: string) {
   ensureKitInitialized();
   const result = await StellarWalletsKit.signTransaction(xdr, { address, networkPassphrase });
