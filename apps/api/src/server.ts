@@ -59,23 +59,24 @@ const app = new Hono();
 
 app.use("*", cors({ origin: "*" }));
 
-const requestHistory = new Map<string, number>();
-
+// Lightweight request logging + correlation id. (No rate limiting: a browser SPA
+// fires several requests concurrently on load, and an early 429 return drops the
+// CORS headers set above — which surfaces in the browser as "Failed to fetch".)
 app.use("*", async (c, next) => {
-  const ip = c.req.header("x-forwarded-for") || "local";
   const correlationId = c.req.header("x-correlation-id") || `corr-${require("crypto").randomBytes(8).toString("hex")}`;
   c.header("x-correlation-id", correlationId);
-
-  const now = Date.now();
-  const lastReq = requestHistory.get(ip);
-  if (lastReq && now - lastReq < 300) {
-    console.warn(`[API] [429] Rate limit triggered for IP ${ip}. Correlation ID: ${correlationId}`);
-    return c.json({ error: "Too Many Requests. Rate limit exceeded (300ms cooldown)." }, 429);
-  }
-  requestHistory.set(ip, now);
-  console.log(`[API] [${c.req.method}] ${c.req.path} - Correlation ID: ${correlationId}`);
+  console.log(`[API] [${c.req.method}] ${c.req.path} - ${correlationId}`);
   await next();
 });
+
+// Friendly root so hitting the base URL directly isn't a bare 404.
+app.get("/", (c) =>
+  c.json({
+    service: "Confidia API Gateway",
+    status: "online",
+    docs: ["/status", "/confidia/contracts", "/domains", "/policies", "/transactions"],
+  })
+);
 
 const supabase = new MockSupabaseClient();
 const isTestMode = process.env.NODE_ENV !== "production";

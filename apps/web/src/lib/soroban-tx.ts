@@ -132,7 +132,7 @@ export async function sendPayment(
   fromAddress: string,
   toAddress: string,
   amount: string,
-  asset: import('@stellar/stellar-sdk').Asset
+  asset?: import('@stellar/stellar-sdk').Asset
 ): Promise<WriteResult> {
   const { Operation, Asset } = await import('@stellar/stellar-sdk');
   const server = new rpc.Server(SOROBAN_RPC_URL);

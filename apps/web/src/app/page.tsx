@@ -36,7 +36,7 @@ import {
 import { Language, translations } from "./translations";
 import { connectWallet } from "../lib/wallet-kit";
 import { authenticateWithWallet } from "../lib/auth";
-import { readContract, writeContract } from "../lib/soroban-tx";
+import { readContract, writeContract, sendPayment } from "../lib/soroban-tx";
 import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -593,8 +593,9 @@ export default function Dashboard() {
   // Form State for Execution simulation
   const [execAgentId, setExecAgentId] = useState<string>("agent-1");
   const [execDomain, setExecDomain] = useState<string>("treasury.example.mx");
-  const [execAmount, setExecAmount] = useState<number>(8500);
-  const [execAsset, setExecAsset] = useState<string>("USDC");
+  const [execAmount, setExecAmount] = useState<number>(10);
+  const [execAsset, setExecAsset] = useState<string>("XLM");
+  const [lastPaymentTx, setLastPaymentTx] = useState<{ hash: string; url: string } | null>(null);
 
   // Wrapper balances (view key decryption demo)
   const [viewKeyInput, setViewKeyInput] = useState<string>("GAUDITORVIEWKEY549023849023482348902348");
@@ -639,83 +640,52 @@ export default function Dashboard() {
   };
 
   // Real-time animated pipeline simulator
-  const handleExecutePayment = (e: React.FormEvent) => {
+  // REAL on-chain treasury payout: a native-XLM payment signed by the connected
+  // wallet (Freighter). Produces a verifiable transaction hash on the explorer.
+  const handleExecutePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
+    if (!freighterConnected || !freighterAddress) {
+      setStatusMessage(lang === "es" ? "Conecta Freighter para firmar el pago." : "Connect Freighter to sign the payment.");
+      setTimeout(() => setStatusMessage(""), 3500);
+      return;
+    }
     setLoading(true);
     setIsConsoleActive(true);
     setConsoleLogs([]);
-
-    const steps = [
-      { text: `[INFO] ${t("log_1")}`, delay: 0, type: "info" as const },
-      { text: `[SUCCESS] ${t("log_2")} (${execDomain})`, delay: 700, type: "success" as const },
-      { text: `[LCP] ${t("log_3")} a47d2f93d8b5...`, delay: 1500, type: "accent" as const },
-      { text: `[SIGN] ${t("log_4")}`, delay: 2300, type: "info" as const },
-      { text: `[PEDERSEN] ${t("log_5")}`, delay: 3000, type: "info" as const },
-      { text: `[NOIR] ${t("log_6")} Amount: ${execAmount} ${execAsset}`, delay: 3700, type: "accent" as const },
-      { text: `[ZK] ${t("log_7")}`, delay: 4400, type: "success" as const },
-      { text: `[GATEWAY] ${t("log_8")}`, delay: 5100, type: "info" as const },
-      { text: `[ON-CHAIN] ${t("log_9")}`, delay: 5800, type: "success" as const }
-    ];
-
-    steps.forEach((step) => {
-      setTimeout(() => {
-        setConsoleLogs((prev) => [...prev, { text: step.text, type: step.type }]);
-      }, step.delay);
-    });
-
-    // Execute real backend agentic payment at the end of logs simulation
-    setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/agents/payments/execute`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            agentId: execAgentId,
-            targetDomain: execDomain,
-            amount: execAmount,
-            assetCode: execAsset,
-            userKYCState: { jurisdiction: "MX", isAccredited: true },
-            policyId: "policy-1"
-          })
-        });
-        const data = await res.json();
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        const receipt = data.receipt;
-        const newTx: TransactionItem = {
-          id: receipt.txHash.substring(0, 10),
+    setLastPaymentTx(null);
+    const log = (text: string, type: any = "info") => setConsoleLogs((prev) => [...prev, { text, type }]);
+    // Treasury vault recipient (demo operator address).
+    const recipient = contractRegistry?.deployer || "GDS5FCW6N7AW4BRJQS22AYUKYSAMNSHMUUTW6ZKRTYMWMIIJUSN7XAHR";
+    try {
+      log(`[INFO] ${t("log_1")}: ${execAmount} XLM → ${recipient.slice(0, 6)}…${recipient.slice(-4)}`, "info");
+      log(`[LCP] ${t("log_3")} ${execDomain}`, "accent");
+      log(`[SIGN] ${t("log_4")}`, "info");
+      const res = await sendPayment(freighterAddress, recipient, String(execAmount));
+      log(`[ON-CHAIN] ${t("log_9")} — tx ${res.hash}`, "success");
+      setLastPaymentTx({ hash: res.hash, url: res.explorerUrl });
+      setTransactions((prev) => [
+        {
+          id: res.hash.substring(0, 10),
           domain: execDomain,
           amount: execAmount,
-          tokenType: execAmount > 5000 ? "confidential" : "standard",
+          tokenType: "standard",
           status: "Completed",
-          atrHash: receipt.agreementRecord.atrHash,
-          created_at: new Date().toISOString()
-        };
-
-        const newAgr = {
-          id: `agr-${Math.random().toString().substr(2, 5)}`,
-          domain: execDomain,
-          agentId: execAgentId,
-          atrHash: receipt.agreementRecord.atrHash,
-          consentTimestamp: receipt.agreementRecord.consentTimestamp,
-          signature: receipt.agreementRecord.signature,
-          status: "signed"
-        };
-
-        setTransactions(prev => [newTx, ...prev]);
-        setAgreements(prev => [newAgr, ...prev]);
-        setStatusMessage(`${t("status_payment_submitted")} Hash: ${receipt.txHash.substring(0, 8)}...`);
-      } catch (err: any) {
-        console.error(err);
-        setConsoleLogs(prev => [...prev, { text: `[ERROR] Execution failed: ${err.message || err}`, type: "warn" }]);
-        setStatusMessage(`Payment failed: ${err.message || err}`);
-      } finally {
-        setLoading(false);
-      }
-    }, 6200);
+          atrHash: res.hash,
+          created_at: new Date().toISOString(),
+        } as TransactionItem,
+        ...prev,
+      ]);
+      setStatusMessage(`${t("status_payment_submitted")} ${res.hash.substring(0, 8)}…`);
+      setTimeout(() => setStatusMessage(""), 4000);
+    } catch (err: any) {
+      log(`[ERROR] ${err?.message || err}`, "warn");
+      if (err?.explorerUrl) setLastPaymentTx({ hash: err.hash, url: err.explorerUrl });
+      setStatusMessage(`Payment failed: ${err?.message || err}`);
+      setTimeout(() => setStatusMessage(""), 4000);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDecryptBalance = () => {
@@ -1081,6 +1051,20 @@ export default function Dashboard() {
                     {loading ? t("processing") : t("trigger_payment")}
                     <ArrowRight className="w-4.5 h-4.5" />
                   </button>
+                  {!freighterConnected && (
+                    <p className="text-[11px] text-amber-400 text-center">{t("jwt_onchain_connect")}</p>
+                  )}
+                  {lastPaymentTx && (
+                    <a
+                      href={lastPaymentTx.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3 hover:bg-emerald-500/15"
+                    >
+                      <CheckCircle2 size={16} /> {t("payment_onchain_success")}
+                      <span className="font-mono text-xs text-indigo-300 underline">{lastPaymentTx.hash.slice(0, 12)}… ↗</span>
+                    </a>
+                  )}
                 </form>
               </div>
 

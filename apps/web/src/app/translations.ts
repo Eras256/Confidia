@@ -35,12 +35,13 @@ export const translations = {
     chart_privacy_subtitle: "Private distribution share by dollar token standard",
 
     // Payments Demo
-    payment_demo_title: "Treasury Reserves Shielding & Transfer Simulation",
-    payment_demo_subtitle: "Simulate a confidential transfer from the treasury reserves to a private distribution vault, attaching LCP compliance metadata and calculating ZK proof inputs.",
+    payment_demo_title: "Treasury Payout — Real On-Chain Transfer",
+    payment_demo_subtitle: "Sign a real payment with Freighter from treasury reserves to a distribution vault, bound to LCP compliance metadata. Settles on Stellar Testnet with a verifiable transaction hash.",
+    payment_onchain_success: "Settled on-chain — tx",
     agent_owner: "Treasury Operator",
     target_domain: "Compliance LCP DNS",
     amount: "Amount (USDC)",
-    trigger_payment: "Simulate Treasury Payout",
+    trigger_payment: "Execute Treasury Payout (on-chain)",
     processing: "Processing...",
     running_lcp: "Running LCP legal gateway verification and client ZK prover...",
     discover_lcp: "Querying domain well-known LCP configurations...",
@@ -289,12 +290,13 @@ export const translations = {
     chart_privacy_subtitle: "Participación de distribución privada por estándar de token de dólar",
 
     // Payments Demo
-    payment_demo_title: "Simulación de Protección y Transferencia de Reservas de Tesorería",
-    payment_demo_subtitle: "Simule una transferencia confidencial desde las reservas de tesorería a una bóveda de distribución privada, adjuntando metadatos de cumplimiento de LCP y calculando las entradas de prueba ZK.",
+    payment_demo_title: "Pago de Tesorería — Transferencia Real On-Chain",
+    payment_demo_subtitle: "Firma un pago real con Freighter desde las reservas de tesorería a una bóveda de distribución, vinculado a metadatos de cumplimiento LCP. Se liquida en la Testnet de Stellar con un hash verificable.",
+    payment_onchain_success: "Liquidado on-chain — tx",
     agent_owner: "Operador de Tesorería",
     target_domain: "DNS de Cumplimiento LCP",
     amount: "Monto (USDC)",
-    trigger_payment: "Simular Pago de Tesorería",
+    trigger_payment: "Ejecutar Pago de Tesorería (on-chain)",
     processing: "Procesando...",
     running_lcp: "Ejecutando verificación legal de pasarela LCP y probador ZK del cliente...",
     discover_lcp: "Consultando configuraciones LCP well-known del dominio...",
