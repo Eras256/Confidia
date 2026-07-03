@@ -91,7 +91,10 @@ The platform is a pnpm monorepo:
 - **`apps/api`** — Hono REST gateway (LCP resolution, Merkle proof verification,
   OIDC JWK sync, contract registry).
 - **`apps/worker`** — background daemon (OIDC key rotation, LCP cache, compliance
-  audits).
+  audits). **Known gap:** it constructs its own file-backed mock persistence
+  client directly rather than the real Supabase Postgres instance `apps/api`
+  uses, so it currently runs disconnected from production state — a discovered,
+  not-yet-fixed issue, documented here rather than hidden.
 - **`contracts/`** — five independent Soroban contracts (§3).
 - **`packages/`** — SDKs for config, Merkle trees, distributions, JWT/OIDC,
   in-browser ZK proving, vesting math, and shared UI. `confidia-sdk` — the LCP
@@ -219,14 +222,24 @@ inputs bind the proof to the nullifier and distribution root; the private inputs
 (JWT, signature, claims) never leave the client.
 (`packages/confidia-jwt-sdk`, `packages/confidia-zk-browser`.)
 
-### 4.4 Confidential balances (inherited primitive)
+### 4.4 Confidential balances (inherited primitive — architecture, not yet deployed)
 
-For amount privacy, Confidia builds on the confidential-token model: balances as
-unchunked Pedersen commitments on the Grumpkin curve, state transitions proven
-with UltraHonk, and per-transfer ephemeral ECDH so recipients and designated
-auditors can recover plaintext. This provides *confidentiality, not anonymity* —
-addresses remain visible, amounts are hidden — and preserves auditor view-keys for
-compliance.
+For amount privacy, Confidia's design builds on the confidential-token model:
+balances as unchunked Pedersen commitments on the Grumpkin curve, state
+transitions proven with UltraHonk, and per-transfer ephemeral ECDH so recipients
+and designated auditors can recover plaintext. This provides *confidentiality,
+not anonymity* — addresses remain visible, amounts are hidden — and preserves
+auditor view-keys for compliance.
+
+**Status: not deployed in this build.** Unlike §9's real UltraHonk verifier, no
+real Pedersen-commitment contract is live on testnet today. The dashboard's
+Confidential Treasury tab performs a real SEP-41 deposit (real signed transfer,
+real balance read from Horizon) but does not shield the amount — it says so
+explicitly in its own UI notice. The simulated version of this primitive
+(`ConfidentialTokenClient` — commitment-shaped hashes, no real contract call)
+lives in the private, never-published `packages/confidia-legacy-sim`, isolated
+from the real, published `confidia-sdk` for exactly this reason: so a real
+capability and a simulated one are never presented under the same name.
 
 ---
 
@@ -405,7 +418,7 @@ Confidia builds on, and adds a distribution/claims/identity/legal/audit layer to
 - **OpenZeppelin Confidential Token suite** — `feat/confidential-verifier-ultrahonk`
   (confidential balances, `ConfidentialVerifier`/`ConfidentialAuditor` model).
 - **Nethermind UltraHonk verifier** — on-chain SNARK verification primitive.
-- **Stellar / Soroman** — `soroban-sdk =20.0.0`, SEP-10 (auth), SEP-41 (tokens),
+- **Stellar / Soroban** — `soroban-sdk =20.0.0`, SEP-10 (auth), SEP-41 (tokens),
   SEP-43 (wallets).
 - **Noir / UltraHonk** — zero-knowledge circuit toolchain for browser-side proving.
 

@@ -89,15 +89,17 @@ confidia/
 │   │   └── src/lib/         #   Wallet-kit + SEP-10 auth helpers
 │   ├── api/                 # Hono REST API (port 3001)
 │   │   └── src/server.ts    #   All endpoints: domains, payments, claims, identity
-│   └── worker/              # Background compliance daemon
-│       └── src/worker.ts    #   LCP cache, OIDC key sync, confidential audits
+│   └── worker/              # Background compliance daemon (known gap: uses its own
+│       └── src/worker.ts    #   file-backed mock persistence, not real Supabase — see below)
 │
 ├── contracts/                         # Cargo workspace — one crate per contract
 │   ├── Cargo.toml                     #   Workspace members + release profile
 │   ├── .cargo/config.toml             #   MVP wasm feature pin (see Build notes)
 │   ├── deployments.testnet.json       #   Canonical deployed contract-ID registry
 │   ├── jwk-registry/                  #   On-chain OIDC JWK public-key store
-│   ├── ultrahonk-verifier/            #   UltraHonk ZK verifier + VK registry
+│   ├── ultrahonk-verifier/            #   UltraHonk ZK verifier (SDK 20, simulation) + VK registry
+│   ├── real-verifier/                 #   REAL UltraHonk verifier (SDK 26, BN254) — not a Cargo
+│   │                                  #   workspace member, deployed separately, called by address
 │   ├── compliance/                    #   Freeze controls + accreditation registry
 │   ├── vesting-claim/                 #   ZK vesting vault, SEP-41 settlement
 │   └── gateway/                       #   LCP-aware agentic payment gateway
@@ -330,8 +332,8 @@ on-chain read — nothing is a static placeholder:
    verified domain.
 8. **Security & Audits** — Live read-only (`simulateTransaction`) and signed
    verification checks against the deployed verifier and compliance contracts.
-9. **Docs** — The live contract registry, REST API reference, and reproducer
-   commands.
+9. **Docs** — The live contract registry, REST API reference, reproducer
+   commands, and a panel linking the published `confidia-sdk` npm package.
 10. **Settings** — Operator preferences, persisted to local storage.
 
 ---
