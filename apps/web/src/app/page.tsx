@@ -1567,6 +1567,7 @@ export default function Dashboard() {
                   {t("register_lcp_button")}
                 </button>
               </form>
+              <p className="mt-2 text-[11px] text-slate-500">{t("register_lcp_hint")}</p>
               {lcpSuccess && (
                 <div className="mt-3 flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3">
                   <CheckCircle2 size={16} className="shrink-0" /> {lcpSuccess}
