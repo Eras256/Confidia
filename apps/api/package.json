@@ -14,12 +14,13 @@
     "@types/jsonwebtoken": "^9.0.10",
     "confidia-config": "workspace:^1.0.0",
     "confidia-sdk": "workspace:^1.0.0",
+    "confidia-distributions-sdk": "workspace:^1.0.0",
+    "confidia-test-utils": "workspace:^1.0.0",
     "hono": "^4.3.7",
     "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
-    "confidia-test-utils": "workspace:^1.0.0",
     "typescript": "^5.4.5"
   }
 }

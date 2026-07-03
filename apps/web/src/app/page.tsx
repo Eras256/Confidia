@@ -36,7 +36,7 @@ import {
 import { Language, translations } from "./translations";
 import { connectWallet } from "../lib/wallet-kit";
 import { authenticateWithWallet } from "../lib/auth";
-import { readContract } from "../lib/soroban-tx";
+import { readContract, writeContract } from "../lib/soroban-tx";
 import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -98,6 +98,11 @@ export default function Dashboard() {
   const [techDrawerOpen, setTechDrawerOpen] = useState<boolean>(false);
   const [claimCountdown, setClaimCountdown] = useState<number>(300); // 5 minutes countdown
   const [contractRegistry, setContractRegistry] = useState<any>(ENV_REGISTRY);
+  // On-chain "register OIDC key" flow (Identity Ops) — real, Freighter-signed
+  const [newKeyKid, setNewKeyKid] = useState<string>("google-oauth-2026");
+  const [keyRegistering, setKeyRegistering] = useState<boolean>(false);
+  const [keyTx, setKeyTx] = useState<{ hash: string; url: string } | null>(null);
+  const [keyTxError, setKeyTxError] = useState<string>("");
   const [liveVerifying, setLiveVerifying] = useState<boolean>(false);
   const [liveResults, setLiveResults] = useState<Array<{ method: string; contract: string; result: string; ok: boolean; latencyMs: number }>>([]);
   const [liveError, setLiveError] = useState<string>("");
@@ -221,6 +226,49 @@ export default function Dashboard() {
       setLiveError(err?.message || String(err));
     } finally {
       setLiveVerifying(false);
+    }
+  };
+
+  // Real, Freighter-signed on-chain action: register an OIDC signing key in the
+  // JWK registry contract. Produces a verifiable transaction hash on stellar.expert.
+  const handleRegisterKeyOnChain = async () => {
+    const jwkId = contractRegistry?.contracts?.jwkRegistry;
+    if (!freighterConnected || !freighterAddress) {
+      setKeyTxError(lang === "es" ? "Conecta Freighter primero." : "Connect Freighter first.");
+      return;
+    }
+    if (!jwkId) {
+      setKeyTxError(lang === "es" ? "Registro JWK no disponible." : "JWK registry unavailable.");
+      return;
+    }
+    const kid = (newKeyKid || "").trim();
+    if (!kid) {
+      setKeyTxError(lang === "es" ? "Ingresa un Key ID." : "Enter a Key ID.");
+      return;
+    }
+    setKeyRegistering(true);
+    setKeyTxError("");
+    setKeyTx(null);
+    try {
+      // add_key(kid, n, e, alg) — all Strings. n/e are demo RSA params (public data).
+      const args = [
+        nativeToScVal(kid, { type: "string" }),
+        nativeToScVal("modulus-" + kid, { type: "string" }),
+        nativeToScVal("AQAB", { type: "string" }),
+        nativeToScVal("RS256", { type: "string" }),
+      ];
+      const res = await writeContract(jwkId, "add_key", args, freighterAddress);
+      setKeyTx({ hash: res.hash, url: res.explorerUrl });
+      // reflect it in the table immediately
+      setJwtKeys((prev) => [
+        { kid, provider: "On-chain (Freighter)", alg: "RS256", n: "modulus-" + kid, e: "AQAB", status: "active" },
+        ...prev.filter((k) => k.kid !== kid),
+      ]);
+    } catch (err: any) {
+      setKeyTxError(err?.message || String(err));
+      if (err?.explorerUrl) setKeyTx({ hash: err.hash, url: err.explorerUrl });
+    } finally {
+      setKeyRegistering(false);
     }
   };
 
@@ -1969,6 +2017,46 @@ export default function Dashboard() {
                 <RefreshCw className={`w-4 h-4 ${jwtSyncing ? "animate-spin" : ""}`} />
                 {t("jwt_btn_sync")}
               </button>
+            </div>
+
+            {/* Real, Freighter-signed on-chain key registration */}
+            <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.04]">
+              <div className="flex items-center justify-between mb-3 gap-4">
+                <div>
+                  <h4 className="font-bold text-white flex items-center gap-2"><Fingerprint className="w-4 h-4 text-indigo-400" /> {t("jwt_onchain_title")}</h4>
+                  <p className="text-xs text-slate-400 mt-1">{t("jwt_onchain_subtitle")}</p>
+                </div>
+                {!freighterConnected && <span className="text-[11px] text-amber-400 whitespace-nowrap">{t("jwt_onchain_connect")}</span>}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  value={newKeyKid}
+                  onChange={(e) => setNewKeyKid(e.target.value)}
+                  placeholder="Key ID (kid)"
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 font-mono focus:border-indigo-500 outline-none"
+                />
+                <button
+                  onClick={handleRegisterKeyOnChain}
+                  disabled={keyRegistering || !freighterConnected}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors whitespace-nowrap"
+                >
+                  {keyRegistering ? <RefreshCw size={15} className="animate-spin" /> : <Send size={15} />}
+                  {keyRegistering ? t("jwt_onchain_signing") : t("jwt_onchain_btn")}
+                </button>
+              </div>
+              {keyTx && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3">
+                  <CheckCircle2 size={16} className="shrink-0" /> {t("jwt_onchain_success")}
+                  <a href={keyTx.url} target="_blank" rel="noopener noreferrer" className="ml-1 underline font-mono text-xs text-indigo-300 hover:text-indigo-200">
+                    {keyTx.hash.slice(0, 12)}… ↗
+                  </a>
+                </div>
+              )}
+              {keyTxError && (
+                <div className="mt-3 flex items-start gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-xl px-4 py-3 break-all">
+                  <XCircle size={16} className="shrink-0 mt-0.5" /> {keyTxError}
+                </div>
+              )}
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-slate-900 bg-slate-900/30">

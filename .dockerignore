@@ -1,0 +1,17 @@
+**/node_modules
+.git
+.github
+.next
+**/.next
+**/out
+**/dist
+contracts/target
+contracts/**/target
+**/*.wasm
+.vercel
+.turbo
+*.log
+.env
+.env.local
+.env.*.local
+db.json

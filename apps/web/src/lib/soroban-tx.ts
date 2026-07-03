@@ -52,6 +52,121 @@ export async function readContract(
   };
 }
 
+const EXPLORER_BASE = 'https://stellar.expert/explorer/testnet';
+export const txExplorerUrl = (hash: string) => `${EXPLORER_BASE}/tx/${hash}`;
+export const contractExplorerUrl = (id: string) => `${EXPLORER_BASE}/contract/${id}`;
+export const accountExplorerUrl = (addr: string) => `${EXPLORER_BASE}/account/${addr}`;
+
+export interface WriteResult {
+  hash: string;
+  explorerUrl: string;
+  status: string;
+  result: any;
+}
+
+/**
+ * Signs a Soroban contract invocation with the connected wallet (Freighter via
+ * Stellar Wallets Kit), submits it, and polls the RPC until it is confirmed on
+ * the ledger. Returns the real transaction hash + a stellar.expert link so the
+ * result is independently verifiable by anyone (e.g. a judge).
+ */
+export async function writeContract(
+  contractId: string,
+  method: string,
+  args: xdr.ScVal[],
+  sourceAddress: string
+): Promise<WriteResult> {
+  const server = new rpc.Server(SOROBAN_RPC_URL);
+  const account = await server.getAccount(sourceAddress);
+  const contract = new Contract(contractId);
+
+  let tx = new TransactionBuilder(account, {
+    fee: '1000000', // fee cap (~0.1 XLM); unused portion is refunded
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(method, ...args))
+    .setTimeout(60)
+    .build();
+
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error);
+  tx = rpc.assembleTransaction(tx, sim).build();
+
+  const signedXdr = await signTransactionXDR(tx.toXDR(), sourceAddress, NETWORK_PASSPHRASE);
+  const sent = await server.sendTransaction(
+    TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE)
+  );
+  if (sent.status === 'ERROR') {
+    throw new Error(`Submit rejected: ${JSON.stringify((sent as any).errorResult ?? sent.status)}`);
+  }
+
+  const hash = sent.hash;
+  let getRes = await server.getTransaction(hash);
+  const start = Date.now();
+  while (getRes.status === rpc.Api.GetTransactionStatus.NOT_FOUND && Date.now() - start < 35000) {
+    await new Promise((r) => setTimeout(r, 1500));
+    getRes = await server.getTransaction(hash);
+  }
+
+  if (getRes.status === rpc.Api.GetTransactionStatus.FAILED) {
+    const e: any = new Error(`Transaction failed on-chain`);
+    e.hash = hash;
+    e.explorerUrl = txExplorerUrl(hash);
+    throw e;
+  }
+
+  let result: any = null;
+  try {
+    if ((getRes as any).returnValue) result = scValToNative((getRes as any).returnValue);
+  } catch {
+    /* return value not decodable — fine */
+  }
+  return { hash, explorerUrl: txExplorerUrl(hash), status: String(getRes.status), result };
+}
+
+/**
+ * Submits a classic Stellar payment (native XLM or SEP-41 SAC) signed by the
+ * connected wallet, polling for confirmation. Returns the tx hash + explorer link.
+ */
+export async function sendPayment(
+  fromAddress: string,
+  toAddress: string,
+  amount: string,
+  asset: import('@stellar/stellar-sdk').Asset
+): Promise<WriteResult> {
+  const { Operation, Asset } = await import('@stellar/stellar-sdk');
+  const server = new rpc.Server(SOROBAN_RPC_URL);
+  const account = await server.getAccount(fromAddress);
+  const tx = new TransactionBuilder(account, {
+    fee: '10000',
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(Operation.payment({ destination: toAddress, asset: asset ?? Asset.native(), amount }))
+    .setTimeout(60)
+    .build();
+
+  const signedXdr = await signTransactionXDR(tx.toXDR(), fromAddress, NETWORK_PASSPHRASE);
+  const sent = await server.sendTransaction(
+    TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE)
+  );
+  if (sent.status === 'ERROR') {
+    throw new Error(`Payment rejected: ${JSON.stringify((sent as any).errorResult ?? sent.status)}`);
+  }
+  const hash = sent.hash;
+  let getRes = await server.getTransaction(hash);
+  const start = Date.now();
+  while (getRes.status === rpc.Api.GetTransactionStatus.NOT_FOUND && Date.now() - start < 35000) {
+    await new Promise((r) => setTimeout(r, 1500));
+    getRes = await server.getTransaction(hash);
+  }
+  if (getRes.status === rpc.Api.GetTransactionStatus.FAILED) {
+    const e: any = new Error('Payment failed on-chain');
+    e.hash = hash; e.explorerUrl = txExplorerUrl(hash);
+    throw e;
+  }
+  return { hash, explorerUrl: txExplorerUrl(hash), status: String(getRes.status), result: null };
+}
+
 export async function buildAndSubmit(contractId: string, method: string, args: any[], sourceAddress: string) {
   const server = new rpc.Server(SOROBAN_RPC_URL);
   const account = await server.getAccount(sourceAddress);

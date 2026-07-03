@@ -1,0 +1,30 @@
+# Confidia API (Hono) — standalone image for Fly.io.
+# Installs/builds only the API and its workspace dependencies. Uses
+# --ignore-scripts so native addons pulled transitively by the workspace
+# (usb/secp256k1/trezor, only used by the web app's hardware wallets) are NOT
+# compiled — the API runs pure-JS and needs none of them.
+FROM node:20-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+WORKDIR /app
+
+# Full monorepo context (trimmed by .dockerignore) so the pnpm workspace resolves.
+COPY . .
+
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter "confidia-api..." --ignore-scripts
+
+# Build the API's workspace dependency packages (topological order), then the API.
+RUN pnpm --filter confidia-config build \
+ && pnpm --filter confidia-test-utils build \
+ && pnpm --filter confidia-merkle build \
+ && pnpm --filter confidia-jwt-sdk build \
+ && pnpm --filter confidia-distributions-sdk build \
+ && pnpm --filter confidia-sdk build \
+ && pnpm --filter confidia-api build
+
+# Testnet demo: keep mock/test mode on (real external LCP/anchor calls disabled).
+ENV NODE_ENV=development
+EXPOSE 3001
+CMD ["node", "apps/api/dist/server.js"]

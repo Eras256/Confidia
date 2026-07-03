@@ -38,9 +38,15 @@ importers:
       confidia-config:
         specifier: workspace:^1.0.0
         version: link:../../packages/confidia-config
+      confidia-distributions-sdk:
+        specifier: workspace:^1.0.0
+        version: link:../../packages/confidia-distributions-sdk
       confidia-sdk:
         specifier: workspace:^1.0.0
         version: link:../../packages/confidia-sdk
+      confidia-test-utils:
+        specifier: workspace:^1.0.0
+        version: link:../../packages/confidia-test-utils
       hono:
         specifier: ^4.3.7
         version: 4.12.27
@@ -51,9 +57,6 @@ importers:
       '@types/node':
         specifier: ^20.12.12
         version: 20.19.43
-      confidia-test-utils:
-        specifier: workspace:^1.0.0
-        version: link:../../packages/confidia-test-utils
       typescript:
         specifier: ^5.4.5
         version: 5.9.3
