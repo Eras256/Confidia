@@ -188,16 +188,32 @@ app.post("/domains/register", async (c) => {
       return c.json({ error: "LCP Terms hash mismatch. Possible document tamper." }, 422);
     }
 
-    // Insert domain into DB
-    const domainRecord = await supabase.from("domains").insert({
+    // Upsert by url — re-registering an already-known domain must refresh its
+    // row, not insert a duplicate. A duplicate url breaks the single-row
+    // lookup that /confidia/agreements/record relies on to bind a settled
+    // payment to this domain, silently failing every future deposit/payment
+    // against it.
+    const fields = {
       tenant_id: tenantId || "tenant-1",
       url,
       lcp_json: lcp,
       atr_hash: lcp.atrHash,
-      status: "verified"
-    }).select().single();
+      status: "verified",
+      verified_at: new Date().toISOString(),
+    };
+    const existing = await supabase.from("domains").select().eq("url", url);
+    const existingRow = (existing.data || [])[0];
 
-    return c.json({ success: true, data: domainRecord.data });
+    let data;
+    if (existingRow) {
+      await supabase.from("domains").update(fields).eq("url", url);
+      data = { ...existingRow, ...fields };
+    } else {
+      const inserted = await supabase.from("domains").insert(fields).select().single();
+      data = inserted.data;
+    }
+
+    return c.json({ success: true, data });
   } catch (error: any) {
     return c.json({ error: `Registration error: ${error.message}` }, 500);
   }
@@ -408,8 +424,13 @@ app.post("/confidia/agreements/record", async (c) => {
     return c.json({ error: "Missing domain or txHash" }, 400);
   }
   try {
-    const domainRes = await supabase.from("domains").select().eq("url", domain).single();
-    const domainRecord = domainRes.data;
+    // .single() would hard-error (not just return null) if more than one row
+    // ever matches this url — fetch the list instead and pick defensively, so
+    // a stray duplicate can't silently break every future recording for this
+    // domain the way it did before /domains/register upserted by url.
+    const domainRes = await supabase.from("domains").select().eq("url", domain);
+    const rows = domainRes.data || [];
+    const domainRecord = rows.find((r: any) => r.status === "verified") || rows[0];
     if (!domainRecord || domainRecord.status !== "verified") {
       return c.json({ error: `Domain '${domain}' is not a verified LCP counterparty. Register it first.` }, 422);
     }
