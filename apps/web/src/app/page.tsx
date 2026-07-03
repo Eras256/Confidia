@@ -737,6 +737,7 @@ export default function Dashboard() {
       case "jwt_ops": return t("nav_jwt_ops");
       case "transactions": return t("nav_transactions");
       case "security": return t("nav_security");
+      case "docs": return t("nav_docs");
       case "settings": return t("nav_settings");
       default: return id;
     }
@@ -784,6 +785,7 @@ export default function Dashboard() {
               { id: "transactions", label: t("nav_transactions"), icon: FileText },
               { id: "security", label: t("nav_security"), icon: AlertTriangle },
               { id: "agents", label: t("nav_agents"), icon: Bot },
+              { id: "docs", label: t("nav_docs"), icon: Code },
               { id: "settings", label: t("nav_settings"), icon: SettingsIcon },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -879,8 +881,8 @@ export default function Dashboard() {
               onChange={(e) => setLang(e.target.value as Language)}
               className="px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-xs font-bold focus:outline-none focus:border-indigo-500 cursor-pointer shadow-md"
             >
-              <option value="en">English 🇬🇧</option>
-              <option value="es">Español 🇪🇸</option>
+              <option value="en">🇺🇸 English</option>
+              <option value="es">🇲🇽 Español</option>
             </select>
 
             {statusMessage && (
@@ -1884,7 +1886,7 @@ export default function Dashboard() {
                         }`}>
                         {s.step}
                       </div>
-                      <span className={`text-[8px] font-mono tracking-tighter uppercase ${active ? "text-indigo-400 font-bold" : "text-slate-600"
+                      <span className={`hidden sm:block text-[8px] font-mono tracking-tighter uppercase leading-tight ${active ? "text-indigo-400 font-bold" : "text-slate-600"
                         }`}>
                         {s.label}
                       </span>
@@ -2160,6 +2162,112 @@ export default function Dashboard() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Developer Docs */}
+        {activeTab === "docs" && (
+          <div className="space-y-6 max-w-4xl">
+            <div className="p-4 sm:p-6 rounded-2xl border border-slate-900 bg-slate-900/25">
+              <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><Code className="w-5 h-5 text-indigo-400" /> {t("docs_title")}</h3>
+              <p className="text-sm text-slate-400 mb-4">{t("docs_intro")}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  { label: t("docs_link_dashboard"), href: "https://confidia.vercel.app", val: "confidia.vercel.app" },
+                  { label: t("docs_link_api"), href: "https://confidia-api.fly.dev", val: "confidia-api.fly.dev" },
+                  { label: t("docs_link_repo"), href: "https://github.com/Eras256/Confidia", val: "github.com/Eras256/Confidia" },
+                ].map((l) => (
+                  <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer" className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-indigo-500/40 transition block">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{l.label}</div>
+                    <div className="text-xs font-mono text-indigo-400 truncate mt-1">{l.val} ↗</div>
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 rounded-2xl border border-slate-900 bg-slate-900/25">
+              <h4 className="font-bold text-white mb-3">{t("docs_contracts")}</h4>
+              <div className="overflow-x-auto rounded-xl border border-slate-900">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-900/80 text-[11px] uppercase text-slate-400"><tr><th className="px-4 py-2">Contract</th><th className="px-4 py-2">Address</th></tr></thead>
+                  <tbody className="divide-y divide-slate-800 font-mono text-xs">
+                    {[
+                      ["Real UltraHonk Verifier (BN254)", "CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J"],
+                      ["Gateway", "CANR7PCHCLOP3YMGXPZVOBHIDNYLDVC3IPKRS52ZAPYUVCYQXHVIAGJC"],
+                      ["Vesting Claim Vault", "CB26YAB57YURXLH5NF43AD4O2NSPSFUDXYDAUTKVLAERODRPSEZWMKIX"],
+                      ["UltraHonk Verifier (sim)", "CBKTBGW2PJRTRA2VDQVDUQFT2UVVMAWRCMQUJPUYVOPW6SQMFTNGDZPP"],
+                      ["Compliance Hook", "CBI3U4KZGVISV7PDGICBAHBSNYL7FEMJ7HL2GLTNHZXRPCLVTQOP3DLF"],
+                      ["JWK Registry", "CCE7XJSY5NQVI62YISRNZMCIVZGVCJ47WB3NDF5NLJIFMX3UUK62KABR"],
+                    ].map(([name, addr]) => (
+                      <tr key={addr} className="hover:bg-slate-900/30">
+                        <td className="px-4 py-2 font-sans text-slate-200 whitespace-nowrap">{name}</td>
+                        <td className="px-4 py-2"><a href={`https://stellar.expert/explorer/testnet/contract/${addr}`} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 whitespace-nowrap">{addr.slice(0, 8)}…{addr.slice(-6)} ↗</a></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.04]">
+              <h4 className="font-bold text-white mb-2">{t("docs_verify")}</h4>
+              <p className="text-sm text-slate-400 mb-3">{t("docs_verify_desc")}</p>
+              <div className="overflow-x-auto rounded-xl bg-slate-950 border border-slate-800 p-3"><pre className="text-xs font-mono text-emerald-400 whitespace-pre">bash contracts/real-verifier/scripts/e2e_testnet.sh</pre></div>
+            </div>
+
+            <div className="p-4 sm:p-6 rounded-2xl border border-slate-900 bg-slate-900/25">
+              <h4 className="font-bold text-white mb-1">{t("docs_api")}</h4>
+              <p className="text-xs text-slate-500 font-mono mb-3">base: https://confidia-api.fly.dev</p>
+              <div className="overflow-x-auto rounded-xl border border-slate-900">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-900/80 text-[11px] uppercase text-slate-400"><tr><th className="px-4 py-2">Method</th><th className="px-4 py-2">Path</th><th className="px-4 py-2">Description</th></tr></thead>
+                  <tbody className="divide-y divide-slate-800 text-xs">
+                    {[
+                      ["GET", "/status", "Health check"],
+                      ["GET", "/confidia/contracts", "Deployed contract registry"],
+                      ["POST", "/domains/register", "Register domain + LCP discovery"],
+                      ["GET", "/domains", "List domains"],
+                      ["GET", "/policies", "List policies"],
+                      ["GET", "/transactions", "List transactions"],
+                      ["POST", "/agents/payments/execute", "Agentic payment"],
+                      ["POST", "/confidia/distributions", "Create Merkle distribution"],
+                      ["POST", "/confidia/claims/submit", "Submit payout claim"],
+                      ["GET", "/confidia/identity/keys", "List JWK keys"],
+                      ["POST", "/confidia/identity/keys/:kid/revoke", "Revoke JWK key"],
+                      ["GET", "/auth/challenge", "SEP-10 challenge"],
+                      ["POST", "/auth/verify", "Verify SEP-10 + issue JWT"],
+                    ].map(([m, p, d]) => (
+                      <tr key={p} className="hover:bg-slate-900/30">
+                        <td className="px-4 py-2 font-mono font-bold text-indigo-400 whitespace-nowrap">{m}</td>
+                        <td className="px-4 py-2 font-mono text-slate-200 whitespace-nowrap">{p}</td>
+                        <td className="px-4 py-2 text-slate-400 whitespace-nowrap">{d}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 rounded-2xl border border-slate-900 bg-slate-900/25">
+              <h4 className="font-bold text-white mb-3">{t("docs_quickstart")}</h4>
+              <div className="overflow-x-auto rounded-xl bg-slate-950 border border-slate-800 p-3">
+                <pre className="text-xs font-mono text-slate-300 whitespace-pre">{`git clone https://github.com/Eras256/Confidia && cd Confidia
+pnpm install
+pnpm build:contracts     # wasm (MVP via -Z build-std)
+pnpm deploy:contracts    # deploy + init on Stellar Testnet
+pnpm test:contracts      # cargo test
+pnpm dev                 # web :3000 · api :3001`}</pre>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 rounded-2xl border border-slate-900 bg-slate-900/25">
+              <h4 className="font-bold text-white mb-3">{t("docs_standards")}</h4>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {["SEP-10 Auth", "SEP-41 Tokens", "SEP-43 Wallets", "OIDC → ZK (Noir 1.0.0-beta.9 / UltraHonk)", "soroban-sdk 20 + 26", "BN254 pairing"].map((s) => (
+                  <span key={s} className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">{s}</span>
+                ))}
+              </div>
             </div>
           </div>
         )}
