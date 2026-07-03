@@ -2699,6 +2699,33 @@ export default function Dashboard() {
               </div>
             </div>
 
+            <div className="p-4 sm:p-6 rounded-2xl border border-slate-900 bg-slate-900/25">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                <h4 className="font-bold text-white">{t("docs_sdk_title")}</h4>
+                <a
+                  href="https://www.npmjs.com/package/confidia-sdk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-mono text-indigo-400 hover:text-indigo-300 break-all sm:break-normal shrink-0"
+                >
+                  npmjs.com/package/confidia-sdk ↗
+                </a>
+              </div>
+              <p className="text-sm text-slate-400 mb-3">{t("docs_sdk_desc")}</p>
+              <div className="overflow-x-auto rounded-xl bg-slate-950 border border-slate-800 p-3 mb-3">
+                <pre className="text-xs font-mono text-emerald-400 whitespace-pre">npm install confidia-sdk</pre>
+              </div>
+              <div className="space-y-2 mb-3">
+                <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{t("docs_sdk_includes")}</span>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {["LcpClient", "PolicyEngine", "SEP-10 helpers"].map((s) => (
+                    <span key={s} className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-mono">{s}</span>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500">{t("docs_sdk_excludes_note")}</p>
+            </div>
+
             <div className="p-4 sm:p-6 rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.04]">
               <h4 className="font-bold text-white mb-2">{t("docs_verify")}</h4>
               <p className="text-sm text-slate-400 mb-3">{t("docs_verify_desc")}</p>
