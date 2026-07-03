@@ -43,7 +43,28 @@ same pipeline; only the circuit and its VK change.
 | `public_inputs` | 32 | the public input `y` |
 | `*_fields.json` | — | field-encoded (human-readable) forms |
 
-## Reproduce
+## Reproduce — one command (no Noir/Barretenberg needed)
+
+A third party can verify the whole thing after `git clone`, with **only the
+`stellar` CLI** installed. It funds a fresh Friendbot key, deploys the real
+verifier + vault from the committed wasms, and asserts the positive/negative cases:
+
+```bash
+bash contracts/real-verifier/scripts/e2e_testnet.sh
+```
+
+Expected tail:
+
+```
+✅ verify_proof(real proof) -> Ok
+✅ verify_proof(tampered proof) -> rejected (VerificationFailed)
+✅ settled: vault 500000000 -> 400000000 (10 XLM out)
+✅ tampered claim reverted; vault unchanged — no funds released
+✅ replay rejected (nullifier already spent)
+== ALL CHECKS PASSED ==
+```
+
+## Reproduce — regenerate the proof from scratch
 
 Requires `nargo 1.0.0-beta.9`, `bb 0.87.0`, and the `stellar` CLI.
 

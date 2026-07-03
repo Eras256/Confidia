@@ -227,6 +227,10 @@ are pinned to `soroban-sdk = "=20.0.0"`.
 > settlement**; a replayed nullifier reverted (`Double claim`). Settlement is genuinely
 > gated on a real proof verifying in the real verifier.
 >
+> **Verify it yourself** (only the `stellar` CLI needed — no Noir/Barretenberg, no
+> recompile): `bash contracts/real-verifier/scripts/e2e_testnet.sh`. It funds a fresh
+> Friendbot key and asserts every case above. Demo storyboard: [`DEMO.md`](./DEMO.md).
+>
 > `contracts/ultrahonk-verifier` (soroban-sdk 20) remains as a labeled fast-path
 > **simulation** for protocol testing.
 

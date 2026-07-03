@@ -74,3 +74,7 @@ SKILL.md
 .turbo/
 .vercel/
 .cache/
+
+# Reproducer wasms (intentionally committed for the self-contained e2e demo)
+!contracts/real-verifier/wasm/
+!contracts/real-verifier/wasm/*.wasm
