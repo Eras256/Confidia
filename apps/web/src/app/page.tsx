@@ -31,7 +31,9 @@ import {
   Activity,
   Send,
   Gift,
-  ShieldCheck
+  ShieldCheck,
+  Menu,
+  X
 } from "lucide-react";
 import { Language, translations } from "./translations";
 import { connectWallet } from "../lib/wallet-kit";
@@ -96,6 +98,7 @@ export default function Dashboard() {
   const [jwtToken, setJwtToken] = useState<string>("");
   const [demoFailureScenario, setDemoFailureScenario] = useState<"happy" | "stale_jwk" | "wrong_wallet" | "paused" | "claimed">("happy");
   const [techDrawerOpen, setTechDrawerOpen] = useState<boolean>(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false); // mobile nav drawer
   const [claimCountdown, setClaimCountdown] = useState<number>(300); // 5 minutes countdown
   const [contractRegistry, setContractRegistry] = useState<any>(ENV_REGISTRY);
   // On-chain "register OIDC key" flow (Identity Ops) — real, Freighter-signed
@@ -712,10 +715,21 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-slate-955 font-sans antialiased text-slate-200">
-      {/* Sidebar Navigation */}
-      <aside className="w-72 bg-slate-950/45 border-r border-slate-900/60 p-6 flex flex-col justify-between backdrop-blur-xl">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm lg:hidden"
+          aria-hidden="true"
+        />
+      )}
+      {/* Sidebar Navigation (drawer on mobile, static on desktop) */}
+      <aside
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-72 max-w-[82vw] bg-slate-950/95 lg:bg-slate-950/45 border-r border-slate-900/60 p-6 flex flex-col justify-between backdrop-blur-xl transform transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
+      >
         <div>
-          <div className="flex items-center gap-3.5 mb-10 px-2">
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-3.5 px-2">
             <div className="relative flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-500 via-indigo-600 to-purple-600 shadow-xl shadow-indigo-550/15">
               <Shield className="w-6 h-6 text-white" />
               <div className="absolute inset-0 rounded-2xl border border-white/20 animate-pulse"></div>
@@ -724,6 +738,10 @@ export default function Dashboard() {
               <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-indigo-200 to-indigo-400 bg-clip-text text-transparent">Confidia</h1>
               <span className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">{t("brand_subtitle")}</span>
             </div>
+          </div>
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-2 text-slate-400 hover:text-white" aria-label="Close menu">
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
           <nav className="space-y-1">
@@ -747,6 +765,7 @@ export default function Dashboard() {
                   onClick={() => {
                     setActiveTab(tab.id);
                     setStatusMessage("");
+                    setSidebarOpen(false);
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 border ${active
                     ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-300 shadow-lg shadow-indigo-500/5"
@@ -771,22 +790,31 @@ export default function Dashboard() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-10 relative bg-slate-950/20">
+      <main className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 lg:p-10 relative bg-slate-950/20">
         {/* Glow Element */}
         <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-indigo-500/5 rounded-full blur-[160px] pointer-events-none"></div>
 
         {/* Dynamic Headers */}
-        <header className="flex justify-between items-center mb-10 pb-6 border-b border-slate-900/60">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest mb-1.5">
-              <Activity className="w-3.5 h-3.5" />
-              Confidia Hub
+        <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 lg:mb-10 pb-6 border-b border-slate-900/60">
+          <div className="flex items-start gap-3 min-w-0">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden mt-0.5 p-2 -ml-1 shrink-0 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest mb-1.5">
+                <Activity className="w-3.5 h-3.5" />
+                Confidia Hub
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white uppercase truncate">{getLocalizedTabHeader(activeTab)}</h2>
+              <p className="text-slate-400 mt-1 text-sm">{t("header_subtitle")}</p>
             </div>
-            <h2 className="text-3xl font-extrabold tracking-tight text-white uppercase">{getLocalizedTabHeader(activeTab)}</h2>
-            <p className="text-slate-400 mt-1 text-sm">{t("header_subtitle")}</p>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
             {/* Global Wallet Status Widget */}
             {freighterConnected ? (
               <div className="flex items-center gap-2.5 bg-slate-900 border border-slate-800 p-1.5 pr-3.5 rounded-xl shadow-md">
@@ -859,7 +887,7 @@ export default function Dashboard() {
             </div>
 
             {/* KPI Row */}
-            <div className="grid grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {[
                 { title: t("kpi_active_agents"), value: "3", desc: t("kpi_active_agents_desc"), icon: Bot, color: "text-blue-400", border: "hover:border-blue-500/20" },
                 { title: t("kpi_protected_volume"), value: "$134,800", desc: t("kpi_protected_volume_desc"), icon: Coins, color: "text-purple-400", border: "hover:border-purple-500/20" },
@@ -883,7 +911,7 @@ export default function Dashboard() {
             </div>
 
             {/* Graphs & Analytics Dashboard */}
-            <div className="grid grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {/* Main SVG Area Chart */}
               <div className="col-span-2 p-6 rounded-2xl border border-slate-900 bg-slate-900/20 backdrop-blur-md">
                 <div className="flex justify-between items-center mb-6">
@@ -982,7 +1010,7 @@ export default function Dashboard() {
             </div>
 
             {/* Quick Demo Payment Box & Interactive ZK Console pipeline */}
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Left Column: Form execution */}
               <div className="p-8 rounded-3xl border border-slate-900 bg-gradient-to-br from-indigo-950/10 to-slate-950/65 shadow-xl flex flex-col justify-between">
                 <div>
@@ -993,7 +1021,7 @@ export default function Dashboard() {
                 </div>
 
                 <form onSubmit={handleExecutePayment} className="space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="text-[10px] text-slate-500 block mb-1.5 font-mono uppercase font-bold tracking-widest">{t("agent_owner")}</label>
                       <select
@@ -1020,7 +1048,7 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="col-span-2">
                       <label className="text-[10px] text-slate-500 block mb-1.5 font-mono uppercase font-bold tracking-widest">{t("amount")}</label>
                       <input
@@ -1120,7 +1148,7 @@ export default function Dashboard() {
                 <HelpCircle className="w-5.5 h-5.5 text-indigo-400" />
                 {t("explain_lcp_title")}
               </h3>
-              <div className="grid grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                 {[
                   { title: t("explain_lcp_title"), desc: t("explain_lcp_desc"), icon: Scale, color: "text-indigo-400" },
                   { title: t("explain_zk_title"), desc: t("explain_zk_desc"), icon: Shield, color: "text-purple-450" },
@@ -1150,7 +1178,7 @@ export default function Dashboard() {
             <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/30 backdrop-blur-md">
               <h3 className="text-lg font-bold text-white mb-2">{t("register_lcp_title")}</h3>
               <p className="text-xs text-slate-400 mb-4">Provide the Counterparty DNS domain to fetch and verify their on-chain compliance metadata.</p>
-              <form onSubmit={handleRegisterDomain} className="flex gap-4">
+              <form onSubmit={handleRegisterDomain} className="flex flex-col sm:flex-row gap-3">
                 <input
                   type="text"
                   placeholder="e.g. counterparty.example.com"
@@ -1167,7 +1195,7 @@ export default function Dashboard() {
               </form>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {domains.map((dom) => (
                 <LcpStatusCard
                   key={dom.id}
@@ -1188,7 +1216,7 @@ export default function Dashboard() {
         {activeTab === "agents" && (
           <div className="space-y-6">
             <h3 className="text-lg font-bold text-white mb-4">{t("active_agents_title")}</h3>
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {agents.map((ag) => (
                 <div key={ag.id} className="p-6 rounded-2xl border border-slate-900 bg-slate-900/25">
                   <div className="flex justify-between items-start mb-4">
@@ -1254,7 +1282,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Wrapping Token forms */}
               <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/30">
                 <h3 className="text-lg font-bold text-white mb-4">{t("wrap_tokens_title")}</h3>
@@ -1329,7 +1357,7 @@ export default function Dashboard() {
             {/* Circuit verifiers */}
             <div>
               <h3 className="text-lg font-bold text-white mb-4">{t("active_verifiers")}</h3>
-              <div className="grid grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <ZkProofVisualizer
                   circuitName="zkBalance"
                   publicInputs={["commitment", "transferAmountCommitment"]}
@@ -1461,7 +1489,7 @@ export default function Dashboard() {
               <div key={pol.id} className="p-6 rounded-2xl border border-slate-900 bg-slate-900/25">
                 <h3 className="text-lg font-bold text-white mb-4">{pol.name}</h3>
 
-                <div className="grid grid-cols-2 gap-6 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                   <div className="p-4 rounded-xl bg-slate-950 border border-slate-900 space-y-3">
                     <h4 className="font-bold text-indigo-400 font-mono text-[10px] uppercase tracking-widest">{t("threshold_limits")}</h4>
                     <div className="flex justify-between">
@@ -1538,7 +1566,7 @@ export default function Dashboard() {
         {/* Tab 7: Security & Audits */}
         {activeTab === "security" && (
           <div className="space-y-8">
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Testing suite status */}
               <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/30">
                 <h3 className="text-lg font-bold text-white mb-4">{t("verification_checklists")}</h3>
@@ -1594,7 +1622,7 @@ export default function Dashboard() {
             <h3 className="text-lg font-bold text-white mb-6">{t("tenant_settings_title")}</h3>
 
             <div className="space-y-6 text-sm">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="text-[10px] text-slate-500 block mb-2 font-mono uppercase font-bold tracking-widest">{t("tenant_name")}</label>
                   <input
@@ -1641,7 +1669,7 @@ export default function Dashboard() {
         )}
         {/* Tab 9: Private Distributions Creator */}
         {activeTab === "distributions" && (
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/25 space-y-6">
               <div>
                 <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
@@ -1680,7 +1708,7 @@ export default function Dashboard() {
               {distRoot && (
                 <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/25 space-y-6">
                   <h3 className="text-lg font-bold text-white mb-4">{t("dist_stats_title")}</h3>
-                  <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
                     <div className="p-3 bg-slate-950 rounded-xl border border-slate-900/80">
                       <span className="text-slate-500 block uppercase font-bold text-[9px] mb-1">{t("dist_total_recipients")}</span>
                       <span className="text-sm font-bold text-white">{distTotalRecipients}</span>
@@ -1737,7 +1765,7 @@ export default function Dashboard() {
 
         {/* Tab 10: Recipient Claim Portal */}
         {activeTab === "claim" && (
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Demo Simulation Controls Selector */}
             <div className="col-span-2 p-4 rounded-2xl border border-indigo-500/20 bg-indigo-550/5 space-y-3">
               <div className="flex justify-between items-center">
@@ -1748,7 +1776,7 @@ export default function Dashboard() {
                   <p className="text-[11px] text-slate-400">{t("demo_mode_desc")}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
                   { id: "happy", label: t("demo_path_happy"), color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
                   { id: "stale_jwk", label: t("demo_path_stale_jwk"), color: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
