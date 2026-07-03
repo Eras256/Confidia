@@ -245,7 +245,7 @@ are pinned to `soroban-sdk = "=20.0.0"`.
 |----------|-------------|
 | **Real UltraHonk Verifier** (Nethermind, SDK 26, BN254) | [`CAM2WWTB…IW6J`](https://stellar.expert/explorer/testnet/contract/CAM2WWTBWGNJBCB7J5LE76H2NUIXIO7VPJCKILY7SMORLPQ5HOGMIW6J) |
 | Gateway | [`CANR7PCH…IAGJC`](https://stellar.expert/explorer/testnet/contract/CANR7PCHCLOP3YMGXPZVOBHIDNYLDVC3IPKRS52ZAPYUVCYQXHVIAGJC) |
-| Vesting Claim Vault | [`CB26YAB5…MKIX`](https://stellar.expert/explorer/testnet/contract/CB26YAB57YURXLH5NF43AD4O2NSPSFUDXYDAUTKVLAERODRPSEZWMKIX) |
+| Vesting Claim Vault | [`CCKUOWDY…RMPWYM`](https://stellar.expert/explorer/testnet/contract/CCKUOWDYYKLZLZ3MO4URUC5U5AJOTMVFS4TJO5V7AJZ3IKPFURMRPWYM) |
 | UltraHonk Verifier (SDK 20, simulation) | [`CBKTBGW2…DZPP`](https://stellar.expert/explorer/testnet/contract/CBKTBGW2PJRTRA2VDQVDUQFT2UVVMAWRCMQUJPUYVOPW6SQMFTNGDZPP) |
 | Compliance Hook | [`CBI3U4KZ…3DLF`](https://stellar.expert/explorer/testnet/contract/CBI3U4KZGVISV7PDGICBAHBSNYL7FEMJ7HL2GLTNHZXRPCLVTQOP3DLF) |
 | JWK Registry | [`CCE7XJSY…KABR`](https://stellar.expert/explorer/testnet/contract/CCE7XJSY5NQVI62YISRNZMCIVZGVCJ47WB3NDF5NLJIFMX3UUK62KABR) |
