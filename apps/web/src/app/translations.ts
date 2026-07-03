@@ -80,6 +80,9 @@ export const translations = {
     live_verify_title: "Live On-Chain Verification",
     live_verify_subtitle: "Invoke the deployed contracts directly on Stellar Testnet via the Soroban RPC. Runs verify_proof on the UltraHonk verifier and is_authorized on the compliance hook against live ledger state.",
     live_verify_btn: "Run Live Check",
+    signed_verify_btn: "Verify on-chain (sign)",
+    signed_verify_running: "Signing…",
+    signed_verify_success: "Verified on-chain — tx",
     live_verify_running: "Querying RPC…",
 
     // Policy
@@ -335,6 +338,9 @@ export const translations = {
     live_verify_title: "Verificación On-Chain en Vivo",
     live_verify_subtitle: "Invoca los contratos desplegados directamente en la Testnet de Stellar vía el RPC de Soroban. Ejecuta verify_proof en el verificador UltraHonk e is_authorized en el hook de cumplimiento contra el estado real del ledger.",
     live_verify_btn: "Ejecutar Verificación",
+    signed_verify_btn: "Verificar on-chain (firmar)",
+    signed_verify_running: "Firmando…",
+    signed_verify_success: "Verificado on-chain — tx",
     live_verify_running: "Consultando RPC…",
 
     // Policy

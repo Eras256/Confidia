@@ -106,6 +106,8 @@ export default function Dashboard() {
   const [keyRegistering, setKeyRegistering] = useState<boolean>(false);
   const [keyTx, setKeyTx] = useState<{ hash: string; url: string } | null>(null);
   const [keyTxError, setKeyTxError] = useState<string>("");
+  const [signedVerifying, setSignedVerifying] = useState<boolean>(false);
+  const [signedVerifyTx, setSignedVerifyTx] = useState<{ hash: string; url: string } | null>(null);
   const [liveVerifying, setLiveVerifying] = useState<boolean>(false);
   const [liveResults, setLiveResults] = useState<Array<{ method: string; contract: string; result: string; ok: boolean; latencyMs: number }>>([]);
   const [liveError, setLiveError] = useState<string>("");
@@ -272,6 +274,33 @@ export default function Dashboard() {
       if (err?.explorerUrl) setKeyTx({ hash: err.hash, url: err.explorerUrl });
     } finally {
       setKeyRegistering(false);
+    }
+  };
+
+  // Real, Freighter-signed verify_proof: submits an actual on-chain transaction
+  // that runs the verifier contract, producing a persisted, verifiable tx hash
+  // (vs. the read-only "Run Live Check" which only simulates).
+  const handleSignedVerify = async () => {
+    const verifierId = contractRegistry?.contracts?.ultrahonkVerifier;
+    if (!freighterConnected || !freighterAddress) {
+      setLiveError(lang === "es" ? "Conecta Freighter para firmar." : "Connect Freighter to sign.");
+      return;
+    }
+    if (!verifierId) return;
+    setSignedVerifying(true);
+    setLiveError("");
+    setSignedVerifyTx(null);
+    try {
+      const proofBytes = Uint8Array.from([0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c]);
+      const proofScVal = nativeToScVal(proofBytes, { type: "bytes" });
+      const emptyVec = xdr.ScVal.scvVec([]);
+      const res = await writeContract(verifierId, "verify_proof", [proofScVal, emptyVec], freighterAddress);
+      setSignedVerifyTx({ hash: res.hash, url: res.explorerUrl });
+    } catch (err: any) {
+      setLiveError(err?.message || String(err));
+      if (err?.explorerUrl) setSignedVerifyTx({ hash: err.hash, url: err.explorerUrl });
+    } finally {
+      setSignedVerifying(false);
     }
   };
 
@@ -1436,18 +1465,35 @@ export default function Dashboard() {
 
             {/* Live on-chain verification against the deployed contracts */}
             <div>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <h3 className="text-lg font-bold text-white">{t("live_verify_title")}</h3>
-                <button
-                  onClick={handleLiveVerify}
-                  disabled={liveVerifying || !contractRegistry?.contracts?.ultrahonkVerifier}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
-                >
-                  {liveVerifying ? <RefreshCw size={16} className="animate-spin" /> : <Activity size={16} />}
-                  {liveVerifying ? t("live_verify_running") : t("live_verify_btn")}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleLiveVerify}
+                    disabled={liveVerifying || !contractRegistry?.contracts?.ultrahonkVerifier}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+                  >
+                    {liveVerifying ? <RefreshCw size={16} className="animate-spin" /> : <Activity size={16} />}
+                    {liveVerifying ? t("live_verify_running") : t("live_verify_btn")}
+                  </button>
+                  <button
+                    onClick={handleSignedVerify}
+                    disabled={signedVerifying || !freighterConnected || !contractRegistry?.contracts?.ultrahonkVerifier}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+                  >
+                    {signedVerifying ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />}
+                    {signedVerifying ? t("signed_verify_running") : t("signed_verify_btn")}
+                  </button>
+                </div>
               </div>
               <p className="text-sm text-slate-400 mb-4">{t("live_verify_subtitle")}</p>
+              {!freighterConnected && <p className="text-[11px] text-amber-400 mb-3 -mt-2">{t("jwt_onchain_connect")}</p>}
+              {signedVerifyTx && (
+                <a href={signedVerifyTx.url} target="_blank" rel="noopener noreferrer" className="mb-3 flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3 hover:bg-emerald-500/15">
+                  <CheckCircle2 size={16} className="shrink-0" /> {t("signed_verify_success")}
+                  <span className="font-mono text-xs text-indigo-300 underline">{signedVerifyTx.hash.slice(0, 12)}… ↗</span>
+                </a>
+              )}
               {liveError && (
                 <div className="mb-3 flex items-center gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 break-all">
                   <XCircle size={16} className="shrink-0" /> {liveError}
