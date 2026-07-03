@@ -3,6 +3,35 @@ import { signTransactionXDR } from './wallet-kit';
 
 const SOROBAN_RPC_URL = process.env.NEXT_PUBLIC_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
 const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || Networks.TESTNET;
+const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL || 'https://horizon-testnet.stellar.org';
+
+export interface WalletBalance {
+  code: string;       // e.g. "XLM", "USDC", "EURC" — whatever the issuer/trustline actually names it
+  issuer: string | null; // null for native XLM
+  balance: string;
+  assetType: string;
+}
+
+/**
+ * Reads the REAL balances of a Stellar account straight from Horizon — no
+ * hardcoded asset/issuer addresses. Returns whatever classic assets (USDC,
+ * EURC, or anything else) the connected wallet actually holds a trustline +
+ * balance for, so the UI never guesses at a possibly-wrong issuer.
+ */
+export async function fetchAccountBalances(address: string): Promise<WalletBalance[]> {
+  const res = await fetch(`${HORIZON_URL}/accounts/${address}`);
+  if (!res.ok) {
+    if (res.status === 404) return []; // unfunded account — no balances yet
+    throw new Error(`Horizon error ${res.status}`);
+  }
+  const data = await res.json();
+  return (data.balances || []).map((b: any) => ({
+    code: b.asset_type === 'native' ? 'XLM' : b.asset_code,
+    issuer: b.asset_issuer || null,
+    balance: b.balance,
+    assetType: b.asset_type,
+  }));
+}
 
 // A funded existing account is only needed as the simulation source; no
 // signature or fees are consumed by a read-only simulate.

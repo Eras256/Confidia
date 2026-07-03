@@ -38,7 +38,7 @@ import {
 import { Language, translations } from "./translations";
 import { connectWallet } from "../lib/wallet-kit";
 import { authenticateWithWallet } from "../lib/auth";
-import { readContract, writeContract, sendPayment } from "../lib/soroban-tx";
+import { readContract, writeContract, sendPayment, fetchAccountBalances, type WalletBalance } from "../lib/soroban-tx";
 import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -108,6 +108,14 @@ export default function Dashboard() {
   const [keyTxError, setKeyTxError] = useState<string>("");
   const [signedVerifying, setSignedVerifying] = useState<boolean>(false);
   const [signedVerifyTx, setSignedVerifyTx] = useState<{ hash: string; url: string } | null>(null);
+  // Real wallet balances (read from Horizon — no hardcoded asset/issuer addresses)
+  const [walletBalances, setWalletBalances] = useState<WalletBalance[]>([]);
+  const [balancesLoading, setBalancesLoading] = useState<boolean>(false);
+  const [selectedDepositIdx, setSelectedDepositIdx] = useState<number>(0);
+  const [depositAmount, setDepositAmount] = useState<string>("10");
+  const [depositing, setDepositing] = useState<boolean>(false);
+  const [depositTx, setDepositTx] = useState<{ hash: string; url: string } | null>(null);
+  const [depositError, setDepositError] = useState<string>("");
   const [liveVerifying, setLiveVerifying] = useState<boolean>(false);
   const [liveResults, setLiveResults] = useState<Array<{ method: string; contract: string; result: string; ok: boolean; latencyMs: number }>>([]);
   const [liveError, setLiveError] = useState<string>("");
@@ -160,6 +168,32 @@ export default function Dashboard() {
     };
     loadBackendData();
   }, [activeTab]);
+
+  // Reads the connected wallet's REAL Horizon balances (no hardcoded asset
+  // addresses) so the Confidential Treasury deposit form always reflects
+  // whatever the user actually holds (native XLM, real testnet USDC/EURC, etc.)
+  const refreshWalletBalances = async (address: string) => {
+    setBalancesLoading(true);
+    try {
+      const balances = await fetchAccountBalances(address);
+      setWalletBalances(balances);
+      setSelectedDepositIdx(0);
+    } catch (err) {
+      console.error("Failed to fetch wallet balances", err);
+      setWalletBalances([]);
+    } finally {
+      setBalancesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (freighterConnected && freighterAddress) {
+      refreshWalletBalances(freighterAddress);
+    } else {
+      setWalletBalances([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freighterConnected, freighterAddress]);
 
   const handleConnectFreighter = async () => {
     try {
@@ -724,6 +758,46 @@ export default function Dashboard() {
     if (!viewKeyInput || !commitmentInput) return;
     const sum = Array.from(commitmentInput).reduce((acc, c) => acc + c.charCodeAt(0), 0);
     setDecryptedBalance((sum % 8000) + 2000);
+  };
+
+  // REAL SEP-41 deposit into the treasury vault, using whatever classic asset
+  // the connected wallet actually holds (read live from Horizon — see
+  // refreshWalletBalances). Signed by Freighter; produces a real, persisted
+  // transaction hash linked to the explorer. This is a genuine on-chain
+  // transfer — it does not (yet) apply Pedersen-shielded confidentiality,
+  // since that primitive (OpenZeppelin's confidential-token contract) is not
+  // deployed in this build; see the notice in the UI.
+  const handleDepositToTreasury = async () => {
+    if (!freighterConnected || !freighterAddress) {
+      setDepositError(lang === "es" ? "Conecta Freighter primero." : "Connect Freighter first.");
+      return;
+    }
+    const selected = walletBalances[selectedDepositIdx];
+    if (!selected) {
+      setDepositError(lang === "es" ? "No se detectó ningún activo en tu billetera." : "No asset detected in your wallet.");
+      return;
+    }
+    const amt = parseFloat(depositAmount);
+    if (!amt || amt <= 0) {
+      setDepositError(lang === "es" ? "Ingresa un monto válido." : "Enter a valid amount.");
+      return;
+    }
+    setDepositing(true);
+    setDepositError("");
+    setDepositTx(null);
+    try {
+      const { Asset } = await import("@stellar/stellar-sdk");
+      const asset = selected.code === "XLM" ? Asset.native() : new Asset(selected.code, selected.issuer!);
+      const recipient = contractRegistry?.deployer || "GDS5FCW6N7AW4BRJQS22AYUKYSAMNSHMUUTW6ZKRTYMWMIIJUSN7XAHR";
+      const res = await sendPayment(freighterAddress, recipient, String(amt), asset);
+      setDepositTx({ hash: res.hash, url: res.explorerUrl });
+      refreshWalletBalances(freighterAddress);
+    } catch (err: any) {
+      setDepositError(err?.message || String(err));
+      if (err?.explorerUrl) setDepositTx({ hash: err.hash, url: err.explorerUrl });
+    } finally {
+      setDepositing(false);
+    }
   };
 
   const getLocalizedTabHeader = (id: string) => {
@@ -1314,37 +1388,89 @@ export default function Dashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Wrapping Token forms */}
+              {/* Real SEP-41 deposit — reads the connected wallet's actual balances via
+                  Horizon (no hardcoded USDC/EURC issuer addresses) and signs a real
+                  payment with Freighter. */}
               <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/30">
-                <h3 className="text-lg font-bold text-white mb-4">{t("wrap_tokens_title")}</h3>
+                <h3 className="text-lg font-bold text-white mb-1.5">{t("wrap_tokens_title")}</h3>
+                <p className="text-xs text-slate-400 mb-4">{t("wrap_tokens_real_note")}</p>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] text-slate-500 block mb-1.5 font-mono uppercase font-bold tracking-widest">{t("wrap_tokens_select")}</label>
-                    <select className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-300 text-xs font-semibold focus:outline-none">
-                      <option value="USDC">USDC (USD Coin Wrapper)</option>
-                      <option value="EURC">EURC (Euro Coin Wrapper)</option>
-                    </select>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[10px] text-slate-500 font-mono uppercase font-bold tracking-widest">{t("wrap_tokens_select")}</label>
+                      {freighterConnected && (
+                        <button
+                          type="button"
+                          onClick={() => refreshWalletBalances(freighterAddress)}
+                          disabled={balancesLoading}
+                          className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <RefreshCw size={11} className={balancesLoading ? "animate-spin" : ""} /> {t("wrap_refresh")}
+                        </button>
+                      )}
+                    </div>
+                    {!freighterConnected ? (
+                      <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2.5">{t("jwt_onchain_connect")}</div>
+                    ) : walletBalances.length === 0 ? (
+                      <div className="text-xs text-slate-400 bg-slate-950 border border-slate-900 rounded-xl px-3 py-2.5">
+                        {balancesLoading ? t("wrap_loading_balances") : t("wrap_no_balances")}
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedDepositIdx}
+                        onChange={(e) => setSelectedDepositIdx(Number(e.target.value))}
+                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-300 text-xs font-semibold focus:outline-none"
+                      >
+                        {walletBalances.map((b, i) => (
+                          <option key={`${b.code}-${b.issuer}`} value={i}>
+                            {b.code} — {parseFloat(b.balance).toLocaleString()} {t("wrap_available")}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="text-[10px] text-slate-500 block mb-1.5 font-mono uppercase font-bold tracking-widest">{t("amount")}</label>
                     <input
                       type="number"
-                      defaultValue="2500"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
                       className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-300 text-xs font-bold focus:outline-none"
                     />
                   </div>
-                  <button className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3.5 px-4 rounded-xl transition duration-300 shadow-md">
-                    {t("wrap_tokens_button")}
+                  <button
+                    onClick={handleDepositToTreasury}
+                    disabled={depositing || !freighterConnected || walletBalances.length === 0}
+                    className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-xl transition duration-300 shadow-md"
+                  >
+                    {depositing ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />}
+                    {depositing ? t("processing") : t("wrap_tokens_button")}
                   </button>
+                  {depositTx && (
+                    <a href={depositTx.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3 hover:bg-emerald-500/15">
+                      <CheckCircle2 size={16} className="shrink-0" /> {t("payment_onchain_success")}
+                      <span className="font-mono text-xs text-indigo-300 underline">{depositTx.hash.slice(0, 12)}… ↗</span>
+                    </a>
+                  )}
+                  {depositError && (
+                    <div className="flex items-start gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-xl px-4 py-3 break-all">
+                      <XCircle size={16} className="shrink-0 mt-0.5" /> {depositError}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* View key audit panel */}
+              {/* View key audit panel — illustrative preview of the OpenZeppelin
+                  Pedersen-commitment / view-key UX; not connected to a deployed
+                  confidential-balance contract (see Reference Architecture Notice above). */}
               <div className="p-6 rounded-2xl border border-slate-900 bg-slate-900/20 flex flex-col justify-between">
                 <div>
-                  <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-                    <Lock className="w-5 h-5 text-purple-400" /> {t("decrypt_commitment_title")}
-                  </h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <Lock className="w-5 h-5 text-purple-400" /> {t("decrypt_commitment_title")}
+                    </h3>
+                    <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">{t("preview_badge")}</span>
+                  </div>
                   <p className="text-xs text-slate-400 mb-4">{t("decrypt_commitment_subtitle")}</p>
                 </div>
 
