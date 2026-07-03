@@ -86,14 +86,17 @@ layer** on top of the confidential-balance primitive.
 The platform is a pnpm monorepo:
 
 - **`apps/web`** — Next.js 14 dashboard (wallet connection via SEP-43 Stellar
-  Wallets Kit, SEP-10 authentication, claim wizard, live on-chain verification).
+  Wallets Kit, SEP-10 authentication, a real on-chain Claim Portal, live
+  on-chain verification).
 - **`apps/api`** — Hono REST gateway (LCP resolution, Merkle proof verification,
   OIDC JWK sync, contract registry).
 - **`apps/worker`** — background daemon (OIDC key rotation, LCP cache, compliance
   audits).
 - **`contracts/`** — five independent Soroban contracts (§3).
 - **`packages/`** — SDKs for config, Merkle trees, distributions, JWT/OIDC,
-  in-browser ZK proving, vesting math, and shared UI.
+  in-browser ZK proving, vesting math, and shared UI. `confidia-sdk` — the LCP
+  client and compliance policy engine — is published on npm:
+  [`npmjs.com/package/confidia-sdk`](https://www.npmjs.com/package/confidia-sdk).
 
 ---
 
@@ -346,32 +349,51 @@ OpenZeppelin's `ConfidentialVerifier` uses. Status as of this writing:
   `Error(Contract, #4) = VerificationFailed`. Valid proof accepted, forged proof rejected —
   by BN254 pairing, not a marker check. Artifacts and a reproducer are committed under
   `contracts/real-verifier/`.
-- ✅ **The full vault flow is proven on-chain, end-to-end** — not just wired in code. A
-  `vesting-claim` vault (`CC2YABHG…VY6P`), initialized with `verifier =` the real
-  verifier, `jwk_registry`, and a native-XLM SAC as funding token, was funded with 50
-  XLM and exercised:
-  - **Deposit → valid claim → settlement.** `claim(real proof, …)` returned `true`; the
-    vault called `jwk.is_key_trusted` then the **real** `verify_proof` (cross-contract
-    to the SDK-26 verifier), which passed, and the SEP-41 transfer executed — the vault's
-    native balance dropped `500000000 → 400000000` (10 XLM settled to the recipient).
-  - **Forged claim → revert, no settlement.** A one-byte-tampered proof made the vault's
-    `verify_proof` sub-call return `Error(Contract, #4) VerificationFailed`, which
-    propagated and reverted the whole claim; the vault balance was **unchanged**. A forged
-    proof releases no funds.
-  - **Replay → revert.** Reusing a spent nullifier reverts with `Double claim detected`.
+- ✅ **The full vault flow is proven on-chain, end-to-end, from the live dashboard —
+  not just a CLI reproducer.** The Claim Portal tab at
+  [confidia.vercel.app](https://confidia.vercel.app) signs and submits `claim()`
+  directly via Freighter and the Soroban RPC against
+  [`CCKUOWDY…RMPWYM`](https://stellar.expert/explorer/testnet/contract/CCKUOWDYYKLZLZ3MO4URUC5U5AJOTMVFS4TJO5V7AJZ3IKPFURMRPWYM)
+  (`verifier =` the real verifier, funded with real testnet XLM), through four
+  scenarios that exercise genuinely different on-chain code paths — confirmed by
+  direct `stellar contract invoke` testing before wiring the UI:
+  - **Happy Path.** A real proof, an on-chain-trusted `kid`, and a fresh nullifier:
+    `claim(real proof, …)` returns `true`; the vault calls `jwk.is_key_trusted` then
+    the **real** `verify_proof` (cross-contract to the SDK-26 verifier), which
+    passes, and the SEP-41 transfer executes — the vault's native balance dropped
+    `500000000 → 400000000` on the first end-to-end run (10 XLM settled), and
+    drops by 1 XLM on every subsequent real run from the UI.
+  - **Untrusted Key.** A `kid` never registered in the on-chain JWK registry —
+    `is_key_trusted` genuinely returns `false`.
+  - **Tampered Proof.** One byte of the real proof flipped — the real verifier's
+    `verify_proof` sub-call returns `Error(Contract, #4) VerificationFailed`,
+    which propagates and reverts the claim. The vault balance is **unchanged**; a
+    forged proof releases no funds.
+  - **Replay.** Reusing a nullifier already spent by a prior Happy Path run
+    reverts with `Double claim detected`.
 
-  This closes the loop: settlement is gated on a real UltraHonk proof verifying in the
-  real verifier, over a real SEP-41 transfer. The SDK-20 vault and SDK-26 verifier
-  interoperate purely by contract address.
+  **A subtlety worth stating explicitly:** all three rejection scenarios are
+  deterministic given already-committed ledger state (the JWK trust map, the
+  registered verification key, the spent-nullifier set), so Soroban's RPC
+  rejects them during `simulateTransaction` — **before the wallet is ever asked
+  to sign**. No fee is charged and no transaction is ever submitted for those
+  three. This means there is genuinely no tx hash for a rejection, by
+  construction, not by omission — the Claim Portal UI states this plainly and
+  shows the real simulation diagnostic instead of fabricating a hash.
+
+  This closes the loop: settlement is gated on a real UltraHonk proof verifying in
+  the real verifier, over a real SEP-41 transfer, reachable by anyone from the
+  live dashboard — not just a terminal reproducer. The SDK-20 vault and SDK-26
+  verifier interoperate purely by contract address.
 
 **This is no longer an architectural promise: a real UltraHonk proof verifies on Stellar
-Testnet today, and a forged one is rejected.** The remaining production work is swapping
-the demonstration circuit (`assert(x != y)`) for Confidia's OIDC-identity + Merkle-inclusion
-circuit and generating claim proofs in the browser — the same verifier and the same pipeline,
-a different circuit and VK.
+Testnet today, from a real dashboard, and a forged one is rejected.** The remaining
+production work is swapping the demonstration circuit (`assert(x != y)`) for Confidia's
+OIDC-identity + Merkle-inclusion circuit and generating claim proofs in the browser — the
+same verifier and the same pipeline, a different circuit and VK.
 
 Other roadmap items: (1) production USDC/EURC SAC as the vault funding asset
-(demo uses a placeholder); (2) mainnet deployment; (3) formal verification of the
+(demo uses native XLM); (2) mainnet deployment; (3) formal verification of the
 nullifier/authorization invariants; (4) LCP registry standardization.
 
 ---

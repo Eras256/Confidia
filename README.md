@@ -35,6 +35,13 @@ Confidia enables institutions to deploy ZK-shielded vesting vaults, verify Web2 
 >
 > *Confidential balances powered by OpenZeppelin Confidential Tokens (dev preview) + Nethermind UltraHonk verifier.*
 
+**📦 The LCP client and policy engine are published on npm:**
+[`confidia-sdk`](https://www.npmjs.com/package/confidia-sdk) — `npm install confidia-sdk`.
+Real, dependency-free logic only (genuine HTTPS LCP discovery + SHA-256 terms
+verification, compliance rule evaluation, SEP-10 helpers); see the
+[package README](./packages/confidia-sdk/README.md) for what's deliberately
+excluded and why.
+
 ---
 
 ## Key Value Propositions
@@ -96,7 +103,10 @@ confidia/
 │   └── gateway/                       #   LCP-aware agentic payment gateway
 │
 ├── packages/
-│   ├── confidia-sdk/                # Core SDK (ESM + CJS dual build)
+│   ├── confidia-sdk/                # Published SDK (ESM + CJS): LcpClient, PolicyEngine, SEP-10 helpers
+│   │                                 #   → npm install confidia-sdk
+│   ├── confidia-legacy-sim/         # Private, never published — simulated ZK/confidential-transfer
+│   │                                 #   logic behind the legacy /agents/payments/execute demo endpoint
 │   ├── confidia-config/             # Network config, asset registry
 │   ├── confidia-merkle/             # Merkle tree builder & verifier
 │   ├── confidia-distributions-sdk/  # Distribution package preparation & proof verification
@@ -108,8 +118,8 @@ confidia/
 │
 ├── .env.example             # Environment variable template
 ├── .gitignore               # Comprehensive exclusion rules
-├── Dockerfile               # Production container image
-├── fly.toml                 # Fly.io deployment config
+├── Dockerfile.api            # The API's real production image (deployed to Fly.io)
+├── fly.api.toml              # Real Fly.io config for confidia-api (used by every deploy)
 ├── package.json             # Root workspace config
 ├── pnpm-workspace.yaml      # pnpm workspace definition
 └── tsconfig.json            # Root TypeScript configuration
@@ -169,6 +179,8 @@ pnpm test
 | `JWT_SECRET` | Production | `confidia_secret_key_*` | Secret key for signing JWT session tokens |
 | `SEP10_SERVER_SECRET` | Production | Random ephemeral | Stellar secret key for SEP-10 challenge signing |
 | `AGENT_SIGNING_KEY` | Production | Mock key | Stellar secret for agentic payment signing |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Recommended | none (falls back to file-backed mock) | Real Postgres persistence for the API — see `scripts/db/schema.sql` |
+| `STELLAR_WALLET_SECRET` | Optional | none | Enables `POST /confidia/treasury/ensure-trustline` (server-signed `changeTrust` only — bounded blast radius) |
 | `NODE_ENV` | No | `development` | Set to `production` to disable test mode |
 | `NEXT_PUBLIC_API_URL` | No | `http://localhost:3001` | API base URL for the frontend |
 
@@ -180,19 +192,29 @@ See [`.env.example`](.env.example) for the full template.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/status` | Health check & identity |
+| `GET` | `/status` | Health check, identity, and real persistence mode (`supabase` vs. `mock-file`) |
 | `GET` | `/confidia/contracts` | Deployed on-chain contract registry (IDs, network, RPC) |
-| `POST` | `/domains/register` | Register a domain and discover its LCP |
-| `GET` | `/domains` | List all registered domains |
-| `POST` | `/agents/payments/execute` | Execute an agentic LCP-compliant payment |
-| `POST` | `/confidia/distributions` | Create a private distribution with Merkle tree |
-| `POST` | `/confidia/distributions/:id/activate` | Activate/deploy a distribution |
-| `POST` | `/confidia/claims/submit` | Submit a payout claim with Merkle proof |
-| `POST` | `/confidia/identity/providers/:provider/sync` | Sync OIDC provider JWK keys |
+| `POST` | `/domains/register` | Register a domain — performs a real HTTPS fetch of its LCP document and a real SHA-256 hash check against its terms |
+| `GET` | `/domains` | List all registered (real, hash-verified) domains |
+| `POST` | `/confidia/treasury/ensure-trustline` | Server-signed `changeTrust` only — establishes a missing trustline before a SEP-41 deposit |
+| `POST` | `/agents/payments/execute` | Legacy agentic-payment demo — its LCP step is real, everything downstream is simulated (see [`confidia-legacy-sim`](./packages/confidia-legacy-sim/README.md)); the live dashboard no longer calls this |
+| `POST` | `/confidia/distributions` | Create a private distribution with a real computed Merkle tree |
+| `GET` | `/confidia/distributions` | List all real distributions (backs the Overview tab's KPI) |
+| `POST` | `/confidia/distributions/:id/activate` | Mark a distribution active after its root is registered on-chain |
+| `GET` | `/confidia/claims` | List all real recorded claims (backs the Overview tab's KPI) |
+| `POST` | `/confidia/claims/record` | Record evidence of a claim that already settled for real on-chain (called by the Claim Portal after a successful signed transaction — no Merkle check, the tx hash itself is the proof) |
+| `GET` | `/agreements` · `/transactions` | Real agreements and settled transactions (Agreements & Audit Trail tab) |
+| `POST` | `/confidia/agreements/record` | Bind a settled on-chain tx to a verified LCP domain as a real agreement — rejected unless the domain passed real LCP verification |
+| `POST` | `/confidia/identity/providers/:provider/sync` | Sync real OIDC provider JWK keys (Google JWKS) |
 | `GET` | `/confidia/identity/keys` | List all cached JWK keys |
 | `POST` | `/confidia/identity/keys/:kid/revoke` | Revoke a specific JWK key |
 | `GET` | `/auth/challenge` | Request a SEP-10 authentication challenge |
 | `POST` | `/auth/verify` | Verify a signed SEP-10 challenge and get JWT |
+
+> The Claim Portal itself calls **no API endpoint for the claim**: it signs and
+> submits `claim()` directly to the vesting-claim vault via Freighter and the
+> Soroban RPC, then best-effort posts to `/confidia/claims/record` purely so the
+> Overview tab's counter reflects it.
 
 ---
 
@@ -224,13 +246,15 @@ are pinned to `soroban-sdk = "=20.0.0"`.
 > [`contracts/real-verifier/`](./contracts/real-verifier/); details:
 > [Technical Paper §9](./TECHNICAL_PAPER.md).
 >
-> **End-to-end proven:** a `vesting-claim` vault
-> ([`CC2YABHG…VY6P`](https://stellar.expert/explorer/testnet/contract/CC2YABHGSO2MSTKGIFKA37PE64QGMPDEIQU3RP4PPW2XKUXS3XRKVY6P))
-> pointed at the real verifier was funded and exercised on-chain: a **valid** proof
-> settled 10 XLM via SEP-41 (vault `500000000 → 400000000`); a **tampered** proof made
-> the vault's `verify_proof` sub-call fail (`#4`) and reverted the claim with **no
-> settlement**; a replayed nullifier reverted (`Double claim`). Settlement is genuinely
-> gated on a real proof verifying in the real verifier.
+> **End-to-end proven — the same vault the live Claim Portal uses:**
+> [`CCKUOWDY…RMPWYM`](https://stellar.expert/explorer/testnet/contract/CCKUOWDYYKLZLZ3MO4URUC5U5AJOTMVFS4TJO5V7AJZ3IKPFURMRPWYM),
+> initialized with the real verifier, is funded and exercised on-chain by the
+> dashboard's four Claim Portal scenarios: **Happy Path** settles real funds via
+> SEP-41; **Untrusted Key**, **Tampered Proof**, and **Replay** are all rejected —
+> not by the vault reverting after submission, but by Soroban's own pre-flight
+> simulation refusing to submit a call that will certainly fail, before any
+> signature is even requested. That's real evidence with no tx hash by design,
+> and the UI says so instead of fabricating one.
 >
 > **Verify it yourself** (only the `stellar` CLI needed — no Noir/Barretenberg, no
 > recompile): `bash contracts/real-verifier/scripts/e2e_testnet.sh`. It funds a fresh
@@ -272,18 +296,43 @@ pnpm deploy:contracts    # build + deploy + initialize all 5 on Testnet
 
 ## Dashboard Features
 
-The Next.js dashboard provides a **10-tab interface** with full English/Spanish i18n:
+The Next.js dashboard provides a **10-tab interface** with full English/Spanish i18n.
+Every number and chart is derived from real Supabase-backed data or a live
+on-chain read — nothing is a static placeholder:
 
-1. **Overview** — Platform metrics and system status
-2. **LCP Registry** — Register domains, discover Legal Context Protocols
-3. **Agent Payments** — Execute ZK-compliant agentic payments with real-time console
-4. **Confidential Tokens** — Pedersen-committed balance operations (deposit/merge/transfer/withdraw)
-5. **Distributions** — Create Merkle-shielded distribution packages
-6. **Claim Portal** — 7-step stepper wizard for recipients to claim payouts
-7. **Identity Ops** — OIDC key synchronization and JWK management
-8. **Transactions** — Full audit trail of all operations
-9. **Security** — SEP-10 authentication and wallet connection
-10. **Settings** — Network and configuration management
+1. **Overview** — Real KPIs (active distributions, settled volume, LCP
+   compliance ratio, on-chain-verified claims) and two charts (a 7-day
+   settled-transaction count, a volume-by-asset breakdown), all computed from
+   live data, not hardcoded numbers.
+2. **Distributions** — Prepare a Merkle-shielded recipient package, then
+   register its root on the vesting-claim vault via a real Freighter-signed
+   `initialize()` transaction.
+3. **Claim Portal** — A real, Freighter-signed `claim()` call against the
+   funded vesting-claim vault, verified by the real Nethermind UltraHonk
+   verifier. Four scenarios exercise genuinely different on-chain code paths:
+   *Happy Path* settles real funds; *Untrusted Key*, *Tampered Proof*, and
+   *Replay* are all rejected by Soroban's own pre-flight simulation before any
+   signature is requested — so there's no tx hash for those three by design,
+   and the UI shows the real RPC diagnostic instead of fabricating one.
+4. **Confidential Treasury** — A real SEP-41 deposit signed by the connected
+   wallet, using whatever asset it actually holds (read live from Horizon).
+   Missing trustlines are established automatically before the payment.
+5. **Identity Ops** — Register and revoke OIDC signing keys on-chain in the
+   JWK registry — both real, Freighter-signed transactions with a stellar.expert
+   evidence link.
+6. **Legal Context** — Register a counterparty domain: a real HTTPS fetch of
+   its `.well-known/legal-context.json` plus a real SHA-256 hash check against
+   its terms document. A domain with no real LCP document is correctly
+   rejected — try `confidia.vercel.app` (passes) against any other domain
+   (genuinely fails).
+7. **Agreements & Audit Trail** — Real settled transactions and LCP
+   agreements, populated only when a real on-chain action is bound to a
+   verified domain.
+8. **Security & Audits** — Live read-only (`simulateTransaction`) and signed
+   verification checks against the deployed verifier and compliance contracts.
+9. **Docs** — The live contract registry, REST API reference, and reproducer
+   commands.
+10. **Settings** — Operator preferences, persisted to local storage.
 
 ---
 
@@ -302,18 +351,31 @@ Confidia uses [`@creit-tech/stellar-wallets-kit`](https://github.com/nicholasgas
 
 ## Deployment
 
-### Docker
+This is how the live deployment actually works — two separate services, not
+one combined container:
+
+### API → Fly.io
+
+The API is a standalone Docker image (`Dockerfile.api`, Node 22 — needed for
+`@supabase/supabase-js`'s realtime client) deployed to Fly.io:
 
 ```bash
-docker build -t confidia .
-docker run -p 3001:3001 -e NODE_ENV=production confidia
+fly deploy -c fly.api.toml -a confidia-api --remote-only
 ```
 
-### Fly.io
+Live at [confidia-api.fly.dev](https://confidia-api.fly.dev).
+
+### Dashboard → Vercel
+
+The Next.js dashboard builds as a static export (`output: "export"`, see
+`apps/web/next.config.mjs`) and deploys as plain static files — no Next.js
+server runtime:
 
 ```bash
-fly deploy
+vercel deploy --prod
 ```
+
+Live at [confidia.vercel.app](https://confidia.vercel.app).
 
 ---
 
