@@ -15,6 +15,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "confidia-config": "workspace:^1.0.0",
     "confidia-sdk": "workspace:^1.0.0",
+    "confidia-legacy-sim": "workspace:^1.0.0",
     "confidia-distributions-sdk": "workspace:^1.0.0",
     "confidia-jwt-sdk": "workspace:^1.0.0",
     "confidia-test-utils": "workspace:^1.0.0",

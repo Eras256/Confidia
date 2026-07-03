@@ -1,3 +1,10 @@
+// Simulated confidential-token wrapper for the legacy
+// /agents/payments/execute demo endpoint. This calls MockSorobanRpc (an
+// in-memory fake, see confidia-test-utils) — no real Soroban contract, no
+// real Pedersen commitments. Kept out of the published confidia-sdk package
+// (this whole package is private, never published) so it can't be mistaken
+// for a real, deployed confidential-transfer primitive, which does not exist
+// in this build (see the notice in the Confidential Treasury tab).
 import { CONFIDIA_ASSETS } from "confidia-config";
 import { MockSorobanRpc } from "confidia-test-utils";
 import * as crypto from "crypto";
@@ -182,7 +189,7 @@ export class ConfidentialTokenClient {
       .update(record.viewKeyUsed)
       .digest("hex")
       .substring(0, 10);
-    
+
     // In real code we verify the signature or HMAC checksum
     return record.checksum.length > 0;
   }

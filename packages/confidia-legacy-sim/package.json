@@ -1,0 +1,19 @@
+{
+  "name": "confidia-legacy-sim",
+  "version": "1.0.0",
+  "description": "Internal-only simulated ZK/confidential-transfer logic for the legacy /agents/payments/execute demo endpoint. Never published — see packages/confidia-sdk for the real, public SDK surface.",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "confidia-sdk": "workspace:^1.0.0",
+    "confidia-config": "workspace:^1.0.0",
+    "confidia-test-utils": "workspace:^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

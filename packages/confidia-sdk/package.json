@@ -1,6 +1,16 @@
 {
   "name": "confidia-sdk",
   "version": "1.0.0",
+  "description": "Legal Context Protocol (LCP) client and compliance policy engine for private, compliant tokenized-dollar distribution on Stellar.",
+  "keywords": ["stellar", "soroban", "compliance", "legal-context-protocol", "sep-10"],
+  "license": "MIT",
+  "author": "Confidia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eras256/Confidia.git",
+    "directory": "packages/confidia-sdk"
+  },
+  "homepage": "https://github.com/Eras256/Confidia#readme",
   "main": "./dist/cjs/src/index.js",
   "module": "./dist/esm/src/index.js",
   "types": "./dist/esm/src/index.d.ts",
@@ -12,19 +22,15 @@
     }
   },
   "files": [
-    "dist"
+    "dist/esm/src",
+    "dist/cjs/src",
+    "README.md"
   ],
-  "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json",
     "test": "vitest run"
-  }
-,
-  "dependencies": {
-    "confidia-config": "workspace:^1.0.0"
   },
   "devDependencies": {
-    "confidia-test-utils": "workspace:^1.0.0",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
   }

@@ -6,5 +6,5 @@
     "outDir": "./dist/cjs",
     "rootDir": "./"
   },
-  "include": ["src/**/*", "scripts/**/*"]
+  "include": ["src/**/*"]
 }

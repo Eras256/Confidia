@@ -1,10 +1,9 @@
 import { MockSupabaseClient } from "confidia-test-utils";
-import { LcpClient, ConfidentialTokenClient } from "confidia-sdk";
-import { CONFIDIA_ASSETS } from "confidia-config";
+import { LcpClient } from "confidia-sdk";
+import { ConfidentialTokenClient } from "confidia-legacy-sim";
 
 const supabase = new MockSupabaseClient();
-const isTestMode = process.env.NODE_ENV !== "production";
-const lcpClient = new LcpClient(isTestMode);
+const lcpClient = new LcpClient();
 const confidentialClient = new ConfidentialTokenClient();
 
 async function refreshLcpCaches() {

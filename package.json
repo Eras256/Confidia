@@ -12,7 +12,7 @@
     "deploy:contracts": "node packages/confidia-sdk/scripts/deploy.js",
     "db:migrate": "node scripts/db/migrate.js",
     "lint": "eslint . --ext .ts,.tsx",
-    "confidia:init": "node packages/confidia-sdk/dist/esm/scripts/confidia-init.js"
+    "confidia:init": "node packages/confidia-legacy-sim/dist/scripts/confidia-init.js"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",

@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "confidia-sdk": "workspace:^1.0.0",
-    "confidia-config": "workspace:^1.0.0"
+    "confidia-legacy-sim": "workspace:^1.0.0",
+    "confidia-test-utils": "workspace:^1.0.0"
   },
   "devDependencies": {
-    "confidia-test-utils": "workspace:^1.0.0",
     "typescript": "^5.4.5",
     "@types/node": "^20.12.12"
   }

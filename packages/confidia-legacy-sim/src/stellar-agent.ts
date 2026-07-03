@@ -1,5 +1,13 @@
-import { LcpClient, AgreementRecord } from "./lcp.js";
-import { PolicyEngine, PolicyRules } from "./policy.js";
+// Orchestrator for the legacy /agents/payments/execute demo endpoint. The LCP
+// discovery/hash-check step (via confidia-sdk's real LcpClient) is genuine;
+// everything downstream — ZK proof generation and the "confidential" or
+// "standard" token transfer — is simulated (see zk.ts/confidential.ts in this
+// same package). The real, on-chain payment flow used by the live dashboard
+// (Confidential Treasury, Claim Portal) does not go through this class at
+// all — it calls sendPayment()/writeContract() directly. This whole package
+// is private and never published; the real confidia-sdk package does not
+// export this class.
+import { LcpClient, AgreementRecord, PolicyEngine, PolicyRules } from "confidia-sdk";
 import { ZkClient } from "./zk.js";
 import { ConfidentialTokenClient } from "./confidential.js";
 import { CONFIDIA_ASSETS } from "confidia-config";
@@ -21,8 +29,8 @@ export class StellarAgentClient {
   private zkClient: ZkClient;
   private confidentialTokenClient: ConfidentialTokenClient;
 
-  constructor(isTestEnv = false) {
-    this.lcpClient = new LcpClient(isTestEnv);
+  constructor() {
+    this.lcpClient = new LcpClient();
     this.policyEngine = new PolicyEngine();
     this.zkClient = new ZkClient();
     this.confidentialTokenClient = new ConfidentialTokenClient();
@@ -117,7 +125,7 @@ export class StellarAgentClient {
 
       const proofObj = await this.zkClient.ultrahonk.generateProof(proofName, inputs);
       proofsGenerated.push(proofName);
-      
+
       // Use the primary proof for the execution payload
       if (proofName === "zkBalance") {
         activeProof = proofObj.proof;

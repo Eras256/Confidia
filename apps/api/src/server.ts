@@ -3,13 +3,11 @@ import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
 import { MockSupabaseClient } from "confidia-test-utils";
 import { createClient } from "@supabase/supabase-js";
-import {
-  LcpClient,
-  PolicyEngine,
-  ZkClient,
-  ConfidentialTokenClient,
-  StellarAgentClient
-} from "confidia-sdk";
+import { LcpClient, PolicyEngine } from "confidia-sdk";
+// Simulated ZK/confidential-transfer logic backing the legacy
+// /agents/payments/execute demo endpoint — see that package's README for why
+// these are kept out of the published confidia-sdk.
+import { ZkClient, ConfidentialTokenClient, StellarAgentClient } from "confidia-legacy-sim";
 import { Keypair, TransactionBuilder, Networks, Operation, Account, Asset, Horizon } from "@stellar/stellar-sdk";
 import jwt from "jsonwebtoken";
 import * as fs from "fs";
@@ -93,12 +91,11 @@ if (supabaseUrl && supabaseServiceRoleKey) {
 } else {
   console.warn("[API] SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY not set — falling back to MockSupabaseClient (db.json). Set them for real persistence.");
 }
-const isTestMode = process.env.NODE_ENV !== "production";
-const lcpClient = new LcpClient(isTestMode);
+const lcpClient = new LcpClient();
 const policyEngine = new PolicyEngine();
 const zkClient = new ZkClient();
 const confidentialClient = new ConfidentialTokenClient();
-const agentClient = new StellarAgentClient(isTestMode);
+const agentClient = new StellarAgentClient();
 
 // 1. Health & Identity Check
 app.get("/status", (c) => {

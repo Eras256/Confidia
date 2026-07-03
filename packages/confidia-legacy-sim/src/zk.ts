@@ -1,3 +1,10 @@
+// Simulated ZK proof generation/verification for the legacy
+// /agents/payments/execute demo endpoint. This is NOT real cryptography —
+// generateProof()/verifyProof() just encode/decode a JSON blob. Kept out of
+// the published confidia-sdk package (this whole package is private, never
+// published) so it can't be mistaken for the real, on-chain UltraHonk
+// verification used by the vesting-claim vault (see contracts/real-verifier
+// and the Claim Portal).
 import * as crypto from "crypto";
 import { ZK_CIRCUITS } from "confidia-config";
 
@@ -81,10 +88,10 @@ export class UltrahonkBackend {
     try {
       const hex = proof.startsWith("0x") ? proof.substring(2) : proof;
       const parsed = JSON.parse(Buffer.from(hex, "hex").toString("utf8"));
-      
+
       if (parsed.circuitName !== circuitName) return false;
       if (parsed.validityMark !== "valid") return false;
-      
+
       return true;
     } catch {
       return false; // Malformed proof

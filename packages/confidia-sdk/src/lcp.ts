@@ -1,6 +1,7 @@
-import { LCP_SPEC } from "confidia-config";
-import { MockLcpServer } from "confidia-test-utils";
 import * as crypto from "crypto";
+
+// Required fields per the Legal Context Protocol spec v1.0.0.
+const LCP_REQUIRED_FIELDS = ["terms", "atrHash"];
 
 export interface LcpDocument {
   terms: string;
@@ -22,30 +23,13 @@ export interface AgreementRecord {
 }
 
 export class LcpClient {
-  private isTestEnv: boolean;
-
-  constructor(isTestEnv = false) {
-    this.isTestEnv = isTestEnv;
-  }
-
   /**
-   * Discovers and retrieves the legal context from a domain.
-   *
-   * The two named fixture domains (treasury.example.mx, issuer.example.com)
-   * are demo data seeded elsewhere in the app (Overview/Agents cards) and
-   * don't resolve on the real internet, so they always go through the mock.
-   * Every other domain — including the app's own real domain — gets a
-   * genuine network fetch. `isTestEnv` no longer forces the mock path: this
-   * app's API runs with NODE_ENV=development on purpose (see Dockerfile.api),
-   * and gating real network I/O on that flag meant registering any real
-   * domain (e.g. confidia.vercel.app) silently 404'd against the mock.
+   * Discovers and retrieves the legal context from a domain via a genuine
+   * network fetch to https://<domain>/.well-known/legal-context.json — no
+   * demo-domain special-casing, so behavior is identical for every caller.
    */
   public async fetchLegalContext(domain: string): Promise<LcpDocument> {
     const url = `https://${domain}/.well-known/legal-context.json`;
-    if (domain.includes("example.mx") || domain.includes("example.com")) {
-      return await MockLcpServer.fetchLcp(url);
-    }
-
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch LCP document: ${response.statusText}`);
@@ -63,13 +47,9 @@ export class LcpClient {
   }
 
   /**
-   * Fetches the raw terms document of the LCP. See fetchLegalContext for why
-   * only the named fixture domains use the mock.
+   * Fetches the raw terms document referenced by an LcpDocument's `terms` URL.
    */
   public async fetchTermsDocument(termsUrl: string): Promise<string> {
-    if (termsUrl.includes("example.mx") || termsUrl.includes("example.com")) {
-      return await MockLcpServer.fetchLcp(termsUrl);
-    }
     const response = await fetch(termsUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch terms document: ${response.statusText}`);
@@ -81,7 +61,7 @@ export class LcpClient {
    * Validates LcpDocument according to the protocol rules.
    */
   public validateLegalContext(lcp: any): boolean {
-    for (const field of LCP_SPEC.requiredFields) {
+    for (const field of LCP_REQUIRED_FIELDS) {
       if (!lcp || typeof lcp !== "object" || !(field in lcp)) {
         return false;
       }

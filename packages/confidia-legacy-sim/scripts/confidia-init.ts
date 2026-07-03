@@ -1,9 +1,6 @@
-import { LcpClient } from "../src/lcp.js";
-import { PolicyEngine } from "../src/policy.js";
+import { LcpClient, PolicyEngine } from "confidia-sdk";
 import { ZkClient } from "../src/zk.js";
-import { ConfidentialTokenClient } from "../src/confidential.js";
 import { StellarAgentClient } from "../src/stellar-agent.js";
-import { CONFIDIA_ASSETS } from "confidia-config";
 import { execSync } from "child_process";
 
 async function verifyTool(cmd: string, name: string): Promise<boolean> {
@@ -31,8 +28,11 @@ async function runDeveloperJourney() {
   await verifyTool("fly version", "Fly CLI");
 
   console.log("\n\x1b[35m[Step 2] Validating LCP Discovery Module...\x1b[0m");
-  const lcpClient = new LcpClient(true);
-  const domain = "treasury.example.mx";
+  const lcpClient = new LcpClient();
+  // The app's own real, live domain — genuinely publishes a legal-context.json
+  // and a matching terms document, so this is a real network round-trip and
+  // hash check, not a fixture.
+  const domain = "confidia.vercel.app";
   console.log(`  Resolving LCP for domain: ${domain}...`);
   const lcp = await lcpClient.fetchLegalContext(domain);
   const isLcpValid = lcpClient.validateLegalContext(lcp);
@@ -86,11 +86,11 @@ async function runDeveloperJourney() {
   console.log(`    - Proof Verification: ${isProofOk ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m"}`);
 
   console.log("\n\x1b[35m[Step 5] Orchestrating E2E Agentic Payment...\x1b[0m");
-  const agentClient = new StellarAgentClient(true);
+  const agentClient = new StellarAgentClient();
   const receipt = await agentClient.executePayment({
     agentId: "agent-1",
     agentPrivateKey: "SAGENTMOCKPRIVATEKEY72304892304892304892348",
-    targetDomain: "treasury.example.mx",
+    targetDomain: "confidia.vercel.app",
     amount: 15000,
     assetCode: "USDC",
     policyRules: rules,

@@ -25,6 +25,7 @@ RUN pnpm --filter confidia-config build \
  && pnpm --filter confidia-jwt-sdk build \
  && pnpm --filter confidia-distributions-sdk build \
  && pnpm --filter confidia-sdk build \
+ && pnpm --filter confidia-legacy-sim build \
  && pnpm --filter confidia-api build
 
 # Testnet demo: keep mock/test mode on (real external LCP/anchor calls disabled).
