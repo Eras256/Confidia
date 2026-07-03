@@ -27,6 +27,8 @@ db.json
 **/out
 **/dist
 
-# Ignorar documentaciones pesadas si las hay
+# Ignorar documentaciones pesadas si las hay (pero no contenido público real
+# de la app, p.ej. los documentos LCP servidos en apps/web/public/legal/)
 *.md
 docs
+!apps/web/public/**/*.md
